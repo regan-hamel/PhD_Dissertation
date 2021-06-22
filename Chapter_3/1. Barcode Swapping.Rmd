@@ -1,0 +1,85 @@
+---
+title: "1. Barcode Swapping"
+author: "Regan"
+date: "17/01/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Based on: 
+https://www.nature.com/articles/s41467-018-05083-x
+
+This script will remove the effects of barcode swapping. 
+
+Notes:
+- because barcode swapping is a phenomenon that is observed at the stage of sequencing (i.e. on the patterned flowcells used by new Illumina sequencers [including the NovaSeq]), this has to be performed by SLX-run
+- the protocol of droplet-based sequencing techniques allow us to assume that it's impossible (essentially) for reads from two (or more) different samples to have the same cell barcode, UMI barcode, and the gene. So if they do, we can remove them.
+- swappedDrops() finds these "impossible" combinations and return a count matrix that does not contain them
+
+
+# Load in the h5 files for a given SLX
+- molecule information files (h5 format) are an output of CellRanger for each sample
+```{r}
+#load in a list of objects containing the sample IDs for each SLX file, and the directory (dir) for the h5 files
+source("/Users/reganhamel/Dropbox (Cambridge University)/Lab/Regan/SCI scRNA-seq Project/scRNAseq Workflow/Sources/SLX Names.R")
+
+
+#select SLX and list of sample IDs
+SLX <- SLX19121
+
+#create a list of directories for all the h5 files in the SLX
+h5_files <- NULL
+for(i in SLX) {
+  h5_files <- c(h5_files, paste0(dir, i, "/molecule_info.h5"))
+}
+```
+
+# Call swappedDrops to remove the effects of barcode swapping 
+- note the authors do not recommend setting min.frac lower than 0.5
+```{r}
+library(DropletUtils)
+set.seed(1000)
+
+s.out <- swappedDrops (h5_files, barcode.length=NULL, min.frac=0.9, get.swapped=TRUE, get.diagnostics=TRUE, hdf5.out=TRUE)
+length(s.out$cleaned)
+class(s.out$cleaned[[1]])
+```
+
+
+# Save the 'cleaned' counts by sample
+```{r}
+for(i in 1:length(SLX)) {
+  counts <- s.out$cleaned[[i]]
+  write10xCounts(counts, path = paste0(dir, SLX[i], "/cleaned_counts"))
+  rm(counts)
+}
+```
+
+# Run diagnostic plots
+```{r}
+library(ggplot2)
+reads <- s.out$diagnostics
+large_frac <- apply(reads, 1, max)/Matrix::rowSums(reads)
+large_frac <- large_frac[large_frac!=1]
+ggplot(mapping = aes(x = large_frac)) +
+  geom_density() +
+  geom_vline(xintercept = c(1/2, 2/3, 3/4)) +
+  geom_label(data = data.frame(lab = c("1/2", "2/3", "3/4"), 
+                               X = c(1/2, 2/3, 3/4),
+                               Y = rep(6, 3)),
+             mapping = aes(x = X, y=Y, label = lab),
+             nudge_x = 0.0) +
+  theme_bw() +
+  labs(x = "Largest read fraction", y = "Density")
+```
+
+```{r}
+ggplot(mapping = aes(x = large_frac)) +
+  stat_ecdf() +
+  theme_bw() +
+  labs(x = "Largest read fraction", y = "Cumulative distribution")
+```
+
