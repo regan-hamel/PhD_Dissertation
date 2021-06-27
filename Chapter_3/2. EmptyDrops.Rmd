@@ -47,7 +47,7 @@ for (i in 1:n) {
   sce <- eval(parse(text=paste0('SCE',i))) #initialis sce as the SingleCellExperiment object
   full.data <- sce #save a copy of the sce before you remove empty drops
   sceL <- eval(parse(text=paste0('sce',i))) #initialise the sample metadata
-  dirI <- paste0(dir0, sceL[length(sceL)], "/", sceL[1],"/")
+  dirI <- paste0(dir0, sceL[11], "/", sceL[1],"/")
   
   #compute statistics for each cell barcode, including the rank (based on total UMI counts per cell), knee and inflection points, total number of counts per barcode, the fitted value
   br.out <- barcodeRanks(counts(sce)) #input the count matrix from the sc
@@ -76,9 +76,9 @@ for (i in 1:n) {
   
   
   # Generate and save the diagnostics plot, counts vs -log probability, to visualize potential empty drops vs cells
-  pdf(paste0(dirI, sceL[1]," Diagnostic Plots.pdf"))
-  plot(e.out$Total, -e.out$LogProb, col=ifelse(is.cell, "red", "black"),
-       xlab="Total UMI count", ylab="-Log Probability")#, xlim = c(x1 = 0, x2 = 100))
+  pdf(paste0(dirI,"Diagnostic Plots.pdf"))
+  plot(log10(e.out$Total), -e.out$LogProb, col=ifelse(is.cell, "red", "black"),
+       xlab="Log10 total UMI count", ylab="-Log Probability", xlim = c(x1 = 2, x2 = 4.5))
   dev.off()
   
   
