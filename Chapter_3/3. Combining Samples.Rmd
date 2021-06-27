@@ -76,8 +76,8 @@ for (i in 1:n) {
   } else { #for this dataset, there will be rowname issues from earlier pre-processing. Align them here
     rownames(sce) <- rownames(SCE1)
     
-    #print("row name issue")
-    #stop()
+    # print("row name issue")
+    # stop()
   }
   
   #Identify the chromosomal location for each gene. Mito location is used for downstream QC"
@@ -109,14 +109,6 @@ for (i in 1:n) {
   clusters <- quickCluster(sce, use.ranks=FALSE, method = "igraph", min.size = 100) #must set min.size, otherwise it takes forever
   sce <- computeSumFactors(sce, min.mean=0.1, cluster=clusters, BPPARAM=SerialParam()) 
   
-  
-  #doublet detection
-  library(scds)
-  sce <- cxds_bcds_hybrid(sce, estNdbl=TRUE)
-  
-  # Save the updated sce for each sample for downstream analysis
-  #saveRDS(sce, paste0(dir0, "sce.RDS")) 
-  
   # Save the post-QC sce for combining samples in the next step
   assign(paste0("sce_", sceL[1]), sce)
   
@@ -145,7 +137,8 @@ for (i in 2:n) {
   #cbind
   sce_all <- cbind(sce_all, sce)
 }
-saveRDS(sce_all, file = paste0(dir1, "/sce.RDS"))
+
+nlevels(factor(sce_all$sampleID))
 ```
 
 ```{r}
@@ -168,10 +161,26 @@ head(rownames(sce[combo_name2]))
 #rownames(sce[combo_name[1]])
 ```
 
+# order levels in a more aesthetically pleasing fashion
+```{r}
+#order factors by time point
+
+sce$sampleID <- factor(sce$sampleID, levels = c("SIGAH9", "SIGAF3", "SIGAD10", "SIGAG11.D2", "SIGAF9","SIGAG9.D1","SIGAH11", "SIGAE11","SIGAF11","SIGAE3", "SIGAD3", "SIGAG9.D3", "SIGAE10", "SIGAF10", "SIGAG11.D21"))
+
+sce$stage <- factor(sce$stage, levels = c("HC", "1", "2", "3", "10", "21"))
+
+sce$date <- factor(sce$date, levels =c("10-Jan-19", "28-Mar-19", "9-Apr-19", "23-May-19","20-Jul-19"))
+```
+
+```{r}
+#set the version chemistry
+sce$version <- 3
+sce[,sce$date == "10-Jan-19"]$version <- 2
+```
 
 #save sce
 ```{r}
-saveRDS(sce, file = paste0(dir1, "/sce.RDS"))
+saveRDS(sce, file = paste0(dir1, "/preQC_sce.RDS"))
 ```
 
 
