@@ -1,0 +1,167 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+dirH <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/HC DEGs/"
+list <- readLines("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/HC DEGs/HC(D10) vs D1-2/SCI-179 genes.txt")
+
+sceH <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/sce_UMAP_noBC.RDS")
+sceH <- sceH[,sceH$stage == "HC"  | sceH$stage == "1" | sceH$stage == "2"]
+colnames(sceH) <- make.unique(colnames(sceH), sep = "X")
+```
+
+# prepare the gene lists
+```{r}
+cyclMG <- c("Hist1h2bc", "Birc5", "H2afx", "Ube2c", "Ccnb2", "Cenpa", "Stmn1")
+aMG <- c("Ccl2", "Apoe", "Spp1", "Ctsb", "Lgals3", "Ftl1", "Fth1", "Fabp5", "Lyz2", "Mif", "Ms4a6c", "Ccl4")
+hMG <- c("P2ry12", "Tmem119","Plxdc2", "Siglech", "Olfml3", "Sparc")
+CAMS <- c("Mrc1", "Pf4", "Ms4a7", "Stab1", "Cbr2", "Cd36")
+
+list <- c(hMG, cyclMG, aMG, CAMS)
+
+list[!(list %in% rownames(sceH))]
+
+```
+
+
+#Generate and save the heatmap
+```{r}
+name <- "CtlvAcute short"
+library(scater)
+plotHeatmap(sceH, features=list, exprs_values="logcounts", cluster_cols=F, cluster_rows=F, columns=order(sceH$sampleID), colour_columns_by=c("sampleID", "stage"), file=paste0(dirH, name,".png"), fontsize=5, show_rownames=T, center=T, symmetric=F, scale="column", cellheight=5, cellwidth=0.035)
+
+```
+#boxplot of activated genes by sample to demonstrate that SIGAG11.D2 is activated
+Generate box plots for DEGs
+```{r}
+sceb <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/sce_UMAP_noBC.RDS")
+```
+
+```{r}
+library(RColorBrewer)
+library(ggplot2)
+library(scran)
+
+dirM <- paste0(dirBC, "boxplots/")
+dir.create(dirM)
+
+genes <-  "Cd36" #c("P2ry12", "Spp1", "Mki67", "Stmn1", "Cfl1", "Birc5")
+# set the clusters
+x <- sceb$sampleID
+
+# generate plots for each gene
+for (i in genes) {
+  
+  # extract the log10-transformed counts for the gene of interest
+  logs <- as.numeric(logcounts(sceb[i]))
+  df <- data.frame(Logs=logs, x=x, cond = sceb$stage)
+  
+  #plot
+  d <- ggplot(data=df, aes(y=Logs, x=x, fill=cond)) + geom_boxplot() + ggtitle(i) + theme(plot.title=element_text(hjust=0.5), axis.text.x=element_text(angle=45, hjust=1)) + ylab("logcounts") + scale_fill_manual(values=c("lightblue", brewer.pal(11,"RdYlGn"),"#003319","black", "grey50", "grey50"))  + xlab("Cluster") 
+  
+  # save and size
+  ggsave(paste0(dirM, i, ".png"), scale=1, height=3, width=4)
+}
+
+d
+```
+
+
+# batch correct and cluster
+#investigate Ctrl only
+```{r}
+library(scran)
+sceR <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/sce.RDS")
+
+sceR <- sceR[,sceR$condition == "HC"]
+
+subset <- "date" #all cells from a given flow cell lane will be combined into a single sce and will be batch corrected only to cells from other flow cell lanes
+sceR$subset <- droplevels(factor(colData(sceR)[subset][,1]))
+```
+
+```{r}
+sceR <- batchelor::multiBatchNorm(sceR, batch=sceR$subset) #size factors are stored in sce
+
+```
+
+# Store column data and assays to restore post-batch correction 
+```{r}
+colData <- colData(sceR)
+counts <- counts(sceR)
+logcounts <- logcounts(sceR)
+
+# Model the variance
+library(scran)
+set.seed(100)
+dec <- modelGeneVar(sceR, block=sceR$subset)
+
+# Select the HVGs with +ve biological components to use downstream
+chosen_hvgs <- getTopHVGs(dec, prop=0.2)
+str(chosen_hvgs)
+HVG <- rownames(sceR[chosen_hvgs,])
+
+library(BiocSingular)
+
+sce_BC_R<- batchelor::fastMNN(sceR,
+                             batch=sceR$subset,
+                             subset.row=rownames(sceR[chosen_hvgs,]),
+                             k=20,#number of nearest neighbours considered 
+                             d=50,#number of pcs used 
+                             auto.merge=T, #the order of merging is important. Set to auto or order by most heterogeneity, if known
+                             BSPARAM = IrlbaParam(deferred=TRUE), #set parallelization
+                             correct.all=F #set correct.all=T otherwise it only corrects chosen.hvg values
+)
+
+colData(sce_BC_R) <- colData
+counts(sce_BC_R) <- counts[HVG,]
+logcounts(sce_BC_R) <- logcounts[HVG,]
+
+set.seed(100)
+library(scater)
+sce_BC_R <- runUMAP(sce_BC_R, dimred="corrected")
+```
+
+#cluster
+```{r}
+library(scran)
+set.seed(100)
+
+metadata(sce_BC_R)$k <- 10
+#generate the shared nearest neighbour graph
+snn.gr <- buildSNNGraph(sce_BC_R, use.dimred="corrected", k = metadata(sce_BC_R)$k) #k ranges from 5-100
+#the larger k (# of nn), the fewer the clusters, 20 is the default in Seurat, 10 in scran
+#lower k means the noise will have a greater impact on the clustering. Larger values are computationally expensive (k=20 takes 2 mins, k=30 takes 10)
+
+#apply the louvain commuinity detectiono
+clusters <- igraph::cluster_louvain(snn.gr) #longer random walks will lead to fewer communities
+
+#store the clusters in the sce object column-based metadata
+sce_BC_R$Cluster <- factor(clusters$membership)
+```
+
+```{r}
+dirU <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/HC DEGs/"
+col_by <- "Cluster"
+plotUMAP(sce_BC_R, colour_by=col_by) #+ scale_fill_manual(values = c("#ABD9E9", "#542788"), aesthetics = "fill")
+#ggsave(filename = paste0(col_by,".png"), path = dirU, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
+```
+
+#remove clusters
+```{r}
+remove <- sce_BC_R$Cluster == 1 | sce_BC_R$Cluster == 4 | sce_BC_R$Cluster == 5 | sce_BC_R$Cluster == 6 | sce_BC_R$Cluster == 7
+#get the cell barcodes
+names <- colnames(sce_BC_R[,remove])
+
+sce_full <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/sce_UMAP_noBC.RDS")
+
+# get the index in the full sce
+names_rem <- (colnames(sce_full) %in% names)
+
+#remove
+sce <- sce_full[,!names_rem]
+
+saveRDS(sce, "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/sce_UMAP_noBC_Ctrl_filt.RDS")
+```
+
