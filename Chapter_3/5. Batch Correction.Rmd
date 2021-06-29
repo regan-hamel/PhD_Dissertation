@@ -1,0 +1,208 @@
+---
+title: "Batch Correction"
+author: "Regan"
+date: "01/04/2020"
+output: html_document
+---
+
+# show the code in the output html file
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Based on:
+Haghverdi, L., A. T. L. Lun, M. D. Morgan, and J. C. Marioni. 2018. “Batch effects in single-cell RNA-sequencing data are corrected by matching mutual nearest neighbors.” Nat. Biotechnol. 36 (5): 421–27.
+
+
+In this Rmd we normalise the samples, perform batch correction, cluster cells, and screen for low quality clusters.
+
+# Load the single cell experiments for each sample and set the parameters 
+```{r}
+library(scater)
+
+# Assign the directory for batch correction files
+dirBC <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/"
+
+# Load the sce containing all samples 
+sce <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/sce_UMAP_noBC_Ctrl_filt.RDS")
+# Select a subset to base the level of batch correct on
+subset <- "date" #all cells from a given collection date lane will be combined into a single sce and will be batch corrected only to cells from other collection date lanes
+
+#set the subset for BC
+sce$subset <- droplevels(factor(colData(sce)[subset][,1]))
+
+#set the subset for normalisation, normalise by date except for the three sample that had a second round of sequencing
+library(plyr)
+sce$batch <- sce$sampleID
+sce$batch <- revalue(sce$batch, c("SIGAF9"="28-Mar-19", "SIGAG9.D1"="28-Mar-19", "SIGAH11"="9-Apr-19", "SIGAE11"="20-Jul-19", "SIGAF11"="20-Jul-19", "SIGAE3"="10-Jan-19", "SIGAD3"="10-Jan-19", "SIGAE10"="23-May-19", "SIGAF10"="23-May-19", "SIGAG11.D21"="9-Apr-19"))
+
+table(sce$batch)
+```
+
+# Perform scaling normalization within each batch for comparison between batches, regardless of the depth of coverage 
+- Size factors are re-scaled using median-based normalisation using the ratio of average counts between batches. i.e. size factors in high-coverage batches are scaled down
+```{r}
+library(batchelor)
+
+sce <- batchelor::multiBatchNorm(sce, batch=sce$batch) #size factors are stored in sce
+```
+
+
+# Store column data and assays to restore post-batch correction 
+```{r}
+colData <- colData(sce)
+counts <- counts(sce)
+logcounts <- logcounts(sce)
+```
+
+# Model the variance
+```{r}
+library(scran)
+set.seed(100)
+dec <- modelGeneVar(sce, block=sce$batch)
+
+#check out the top HVGs
+head(dec[order(dec$bio, decreasing=T),1:6])
+```
+
+#plot the trend, visualising the biological vs technical variance
+```{r}
+gene <- "Spp1"
+pdf(paste0(dirBC, "Modeling Variance_batch_norm.pdf"))
+
+for (i in colnames(dec$per.block)) {
+  current <- dec$per.block[[i]]
+  plot(current$mean, current$total, pch=18,  ylab = "Variance of log-Expression", xlab = "Mean log-Expression", main = i)
+  curve(metadata(current)$trend(x), add=TRUE, col="dodgerblue")
+  text(current$mean[gene], current$total[gene], labels=gene) 
+}
+
+dev.off()
+```
+
+# Select the HVGs with +ve biological components to use downstream
+```{r}
+chosen_hvgs <- getTopHVGs(dec, prop=0.2)
+str(chosen_hvgs)
+```
+
+# Save a record of the HVGs
+```{r}
+HVG <- rownames(sce[chosen_hvgs,])
+saveRDS(HVG, file = paste0(dirBC,"HVG.RDS"))
+```
+
+#visualise the top HVGs
+```{r}
+top <- dec[order(dec$bio, decreasing=T),1:6][1:5,]
+
+plotExpression(sce, features=rownames(top), colour_by = "stage")
+ggsave(filename = "Violin Plot by stage.png", plot = last_plot(), device = NULL, path = dirI, scale = 1, width = NA, height = NA, units = c("in", "cm", "mm"), dpi = 300, limitsize = TRUE)
+
+```
+
+# Reduce dimensions for visualization via UMAP
+Note: these are not the UMAP parameters used for the Figures
+```{r}
+set.seed(100)
+sce <- runUMAP(sce, feature_set=HVG)
+```
+
+# Save the sce
+```{r}
+saveRDS(sce, file=paste0(dirBC, "sce_UMAP_noBC_Ctrl_filt.RDS"))
+```
+
+# Visualize the batch corrected dataset via UMAP by cluster and percent of counts from mitochondrial genes
+```{r}
+
+set.seed(100)
+pdf(file = paste0(dirBC, "Pre BC UMAP.pdf"))
+plotUMAP(sce, colour_by="sampleID", by_exprs_values= "logcounts")
+plotUMAP(sce, colour_by="date", by_exprs_values= "logcounts")
+plotUMAP(sce, colour_by="SLX", by_exprs_values= "logcounts")
+plotUMAP(sce, colour_by="P2ry12", by_exprs_values= "logcounts")
+plotUMAP(sce, colour_by="Fabp5", by_exprs_values= "logcounts")
+plotUMAP(sce, colour_by="Ms4a7", by_exprs_values= "logcounts")
+plotUMAP(sce, colour_by="S100a11", by_exprs_values= "logcounts")
+plotUMAP(sce, colour_by="stage", by_exprs_values= "logcounts")
+plotUMAP(sce, colour_by="subsets_Mito_percent", by_exprs_values= "logcounts")
+plotUMAP(sce, colour_by="log10sum", by_exprs_values= "logcounts")
+dev.off()
+
+plotUMAP(sce, colour_by="stage")
+ggsave(filename = "pre_stage_full.png", path = dirBC, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
+
+#rename levels to include NA for those not of interest
+sce$grey <- sce$sampleID 
+sce$grey[sce$grey  != "SIGAE3" & sce$grey !=  "SIGAG9.D3"] <- NA
+
+#plot
+plotUMAP(sce, colour_by="grey") + scale_fill_manual(values = c("#D53E4F", "#542788"), aesthetics = "fill", na.value = "grey90") + theme(plot.title = element_text(size = rel(2)))
+ggsave(filename = "pre_sampleID_E3_G9.D3.png", path = dirBC, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
+
+```
+
+# Perform the batch correction
+```{r}
+library(BiocSingular)
+
+sce_BC <- batchelor::fastMNN(sce,
+                             batch=sce$subset,
+                             subset.row=rownames(sce[chosen_hvgs,]),
+                             k=20,#number of nearest neighbours considered 
+                             d=50,#number of pcs used 
+                             merge.order = c(4, 5, 1, 3, 2), #merge with most diverse sample first
+                             #auto.merge=T, #the order of merging is important. Set to auto or order by most heterogeneity, if known
+                             BSPARAM = IrlbaParam(deferred=TRUE), #set parallelization
+                             correct.all=F #set correct.all=T otherwise it only corrects chosen.hvg values
+)
+```
+
+# Restore old column data and assays
+```{r}
+colData(sce_BC) <- colData
+counts(sce_BC) <- counts[HVG,]
+logcounts(sce_BC) <- logcounts[HVG,]
+```
+
+# Reduce dimensions for visualization via UMAP
+Note: these are not the UMAP parameters used for the Figures
+```{r}
+set.seed(100)
+sce_BC <- runUMAP(sce_BC, dimred="corrected")
+```
+
+# Save the sce
+```{r}
+saveRDS(sce_BC, file=paste0(dirBC, "sce_postBC.RDS"))
+```
+
+# Visualize the batch corrected dataset via UMAP by cluster and percent of counts from mitochondrial genes
+```{r}
+set.seed(100)
+pdf(file = paste0(dirBC, "Post BC UMAP.pdf"))
+plotUMAP(sce_BC, colour_by="sampleID", by_exprs_values= "logcounts")
+plotUMAP(sce_BC, colour_by="date", by_exprs_values= "logcounts")
+plotUMAP(sce_BC, colour_by="SLX", by_exprs_values= "logcounts")
+plotUMAP(sce_BC, colour_by="P2ry12", by_exprs_values= "logcounts")
+plotUMAP(sce_BC, colour_by="Fabp5", by_exprs_values= "logcounts")
+plotUMAP(sce_BC, colour_by="Ms4a7", by_exprs_values= "logcounts")
+plotUMAP(sce_BC, colour_by="S100a11", by_exprs_values= "logcounts")
+plotUMAP(sce_BC, colour_by="stage", by_exprs_values= "logcounts")
+plotUMAP(sce_BC, colour_by="subsets_Mito_percent", by_exprs_values= "logcounts")
+plotUMAP(sce_BC, colour_by="log10sum", by_exprs_values= "logcounts")
+dev.off()
+
+plotUMAP(sce_BC, colour_by="stage")
+ggsave(filename = "post_sampleID_full.png", path = dirBC, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
+
+#rename levels to include NA for those not of interest
+sce_BC$grey <- sce_BC$sampleID 
+sce_BC$grey[sce_BC$grey  != "SIGAE3" & sce_BC$grey !=  "SIGAG9.D3"] <- NA
+
+#plot
+plotUMAP(sce_BC, colour_by="grey") + scale_fill_manual(values = c("#D53E4F", "#542788"), aesthetics = "fill", na.value = "grey90") + theme(plot.title = element_text(size = rel(2)))
+ggsave(filename = "post_sampleID_E3_G9.D3.png", path = dirBC, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
+
+```
