@@ -30,7 +30,7 @@ sce_comp$stage <- factor(sce_comp$stage, levels = c("HC","0", "1", "2", "3", "10
 sce_comp$stage[sce_comp$stage == "HC"] <- 0
 
 # set the x and y values for the plot
-y <- sce_comp$cell_type
+y <- sce_comp$Cluster
 x <- droplevels(factor(sce_comp$stage))
 
 # create the df containing the x and y values
@@ -58,7 +58,7 @@ ggplot(data, aes(x=time, y=percentage, fill=group)) +
   geom_area(alpha=0.7 , size=0.5, colour="black") + ylab("Fraction of Cells") + scale_x_continuous(name ="Day Post-SCI", breaks=c(0,1,2, 3, 10, 21), labels=c("0"="HC","1"="1","2"="2", "3"="3", "10"="10", "21"="21"))+ scale_fill_brewer(palette="Accent", direction=-1)
 
 
-ggsave(paste0(dirP, "/Composition Area Plot Cell Type.png"), height=5, width=6)
+ggsave(paste0(dirP, "/Composition Area Plot cluster.png"), height=5, width=6)
 ```
 
 #histogram of cell type per cluster
@@ -100,4 +100,42 @@ ggplot(data, aes(fill=group, y=value, x=cluster)) +
 ggsave(paste0(dirP, "/barplot_celltype_clust.png"), height=5, width=6)
 
 ```
+
+```{r}
+library(scater)
+cby <- "stage"
+plotUMAP(sce, colour_by=cby)
+ggsave(filename = paste0(cby, ".png"), path = dirP, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
+
+```
+#Correlation of clusters bt stages
+```{r}
+PCAs <- paste0("PCA_", sce$Cluster_PCA)
+Corrected <- paste0("MNN_", sce_BC$Cluster)
+All <- table(sce$stage, sce$Cluster)
+head(All)
+```
+
+#pearson's residuals
+- http://www.sthda.com/english/wiki/chi-square-test-of-independence-in-r (how to interpret)
+```{r}
+library(RColorBrewer)
+library(corrplot)
+
+chisq <- chisq.test(All)
+
+# convert the z-scores (standardized residuals) to chi square values
+chisq.val <- chisq$stdres * chisq$stdres
+
+# convert the chi square values to p values
+chi.p <- pchisq(chisq.val, df=1, lower.tail=FALSE) 
+
+# correct for multiple testing:
+# compare the chi square values to the bonferonni adjusted p value
+bf.p <- (0.05/(nrow(All)*ncol(All)))
+
+corrplot(chisq$stdres, p.mat=chi.p, is.cor = FALSE, sig.level = bf.p, tl.col = "black", method="color", cl.length =10 )
+
+```
+
 
