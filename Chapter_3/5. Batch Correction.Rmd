@@ -21,10 +21,10 @@ In this Rmd we normalise the samples, perform batch correction, cluster cells, a
 library(scater)
 
 # Assign the directory for batch correction files
-dirBC <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/"
+dirBC <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/2. BC/"
 
 # Load the sce containing all samples 
-sce <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/sce_UMAP_noBC_Ctrl_filt.RDS")
+sce <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/2. BC/sce_UMAP_noBC_Ctrl_filt.RDS")
 # Select a subset to base the level of batch correct on
 subset <- "date" #all cells from a given collection date lane will be combined into a single sce and will be batch corrected only to cells from other collection date lanes
 
@@ -53,6 +53,7 @@ sce <- batchelor::multiBatchNorm(sce, batch=sce$batch) #size factors are stored 
 colData <- colData(sce)
 counts <- counts(sce)
 logcounts <- logcounts(sce)
+sF <- sizeFactors(sce)
 ```
 
 # Model the variance
@@ -164,6 +165,7 @@ sce_BC <- batchelor::fastMNN(sce,
 colData(sce_BC) <- colData
 counts(sce_BC) <- counts[HVG,]
 logcounts(sce_BC) <- logcounts[HVG,]
+sizeFactors(sce_BC) <- sF
 ```
 
 # Reduce dimensions for visualization via UMAP
