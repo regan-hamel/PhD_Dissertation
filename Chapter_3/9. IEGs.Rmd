@@ -1,0 +1,258 @@
+---
+title: "Extended Data Fig 1"
+author: "Regan"
+date: "16/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Comparison of percent of counts from immediate early genes (IEGs) from microglia across several scRNA-seq studies
+- first we will load the datasets and apply the same QC thresholds to each
+- then we will calculate the percent of counts from IEGs
+- finally, we will plot the percent of IEGs counts in a violin plot
+
+Initialise the function to prepare each single cell experiment using the same QC metrics
+
+--------------------- SCI data ---------------------
+Load the SCI data *before* low quality cluster removal and extract only the resident CNS data
+```{r}
+sce.SCI <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/1. QC/preQC_sce.RDS")
+
+# extract only HC 
+sce.SCI <- sce.SCI[,sce.SCI$stage == "HC"]
+```
+
+--------------------- Yang 2018 data ---------------------
+Load the Yang 2018 data from the gene-counts matrix downloaded from the GEO: GSE101901
+- this study investigated CNS cells post-traumatic brain injury using DropSeq
+```{r}
+library(SingleCellExperiment)
+
+counts <- read.table("/Users/reganhamel/Dropbox (Cambridge University)/Lab/Regan/SCI scRNA-seq Project/Cx3cr1 Data/Universal Workflow/GEO Datasets/Yang TBI snRNA data/GSE101901/GSE101901_DropSeqTBI.digital_expression.txt.gz")
+
+all.counts <- as.matrix(counts)
+sce.Y <- SingleCellExperiment(list(counts=all.counts))
+dim(sce.Y)
+```
+
+Isolate HC microglia, defined as C1q+ cells (by the authors of the Yang 2018 dataset)
+- We confirmed the expression of microglia markers in this subpopulation (data not shown)
+- microglia markers that we confirmed to be expressed in this subset: "Tmem119", "Iba1", "Itgam", "P2ry12", "P2ry13", "Gpr34", "Sparc", "Olfml3", "Hexb", "Fcrls", "Trem2", "C1qa","C1qb", "C1qc", "Sall1", "Ptprc", "Cx3cr1", "Adgre1", "Cd68", "Cd40"
+```{r}
+# isolate only HC cells
+sce.Y <- sce.Y[,grep("Sham.*", colnames(sce.Y))]
+
+# remove cells without C1qa 
+sce.Y <- sce.Y[,counts(sce.Y["C1qa"]) > 0]
+```
+
+--------------------- Stevens 2019 data ---------------------
+- this study enriched for microglia by FACS for Cd45-low Cd11b-high Cx3cr1-high cells before sequencing via 10X Chromium single cell 3' solution. We examined only their P100 dataset from healthy and LPC injured mice, as these samples were the most similar to our current study.
+- note this dataset had mitochondrial genes removed
+- note that their P30 dataset had similar IEG % but was strictly HC
+
+Load the Stevens 2019 data from the sample-specific gene-counts matrices downloaded from the GEO: GSE121654
+```{r}
+library(stringr)
+list <- c("GSM3442030_P100_male_3.dge.txt GSM3442026_P100_Male_1.dge.txt GSM3442026_P100_Male_1.dge.txt.gz GSM3442027_P100_Male_2.dge.txt GSM3442027_P100_Male_2.dge.txt.gz GSM3442028_P100_female_1.dge.txt GSM3442028_P100_female_1.dge.txt.gz GSM3442029_P100_female_2.dge.txt GSM3442029_P100_female_2.dge.txt.gz GSM3442030_P100_male_3.dge.txt.gz GSM3442031_P100_male_4.dge.txt GSM3442031_P100_male_4.dge.txt.gz GSM3442032_P100_female_3.dge.txt GSM3442032_P100_female_3.dge.txt.gz GSM3442033_P100_female_4.dge.txt GSM3442033_P100_female_4.dge.txt.gz GSM3442038_P100_M_A1.dge.txt GSM3442038_P100_M_A1.dge.txt.gz GSM3442039_P100_M_A2.dge.txt GSM3442039_P100_M_A2.dge.txt.gz GSM3442040_P100_M_B5.dge.txt GSM3442040_P100_M_B5.dge.txt.gz GSM3442041_P100_M_SALINE_A3.dge.txt GSM3442041_P100_M_SALINE_A3.dge.txt.gz GSM3442042_P100_M_SALINE_A5.dge.txt GSM3442042_P100_M_SALINE_A5.dge.txt.gz GSM3442043_P100_M_SALINE_B9.dge.txt GSM3442043_P100_M_SALINE_B9.dge.txt.gz")
+
+# separates the strings by empty space 
+list <- unlist(strsplit(list, split = " "))
+
+#remove the zip files
+list <- gsub(".*gz", "", list)
+
+#remove the whitespace on each end
+list <- trimws(list, which = "b", whitespace = "[ \t\r\n]")
+
+#remove empties
+list <- list[list!=""]
+
+#load in and combine each sample
+dirG <- "/Users/reganhamel/Dropbox (Cambridge University)/Lab/Regan/SCI scRNA-seq Project/Cx3cr1 Data/Universal Workflow/GEO Datasets/Stevens 2019/P100/"
+
+# load the first sample
+all.counts <- read.delim(paste0(dirG, list[1]))
+rownames(all.counts) <- all.counts[,1]
+all.counts <- all.counts[,-1]
+
+list <- list[-1]
+head(all.counts)
+
+# load and combine the remaining samples
+for (i in list) {
+  #read in counts
+  counts <- read.delim(paste0(dirG, i))
+  rownames(counts) <- counts[,1]
+  counts <- counts[,-1]
+  
+  # match the genes across samples by determining which sample contains more genes and taking the shorter of the two
+  if (nrow(counts) > nrow(all.counts)) {
+    counts <- counts[rownames(all.counts),]
+    rownames <- rownames(counts)
+  } else {
+    all.counts <- all.counts[rownames(counts),]
+    rownames <- rownames(all.counts)
+  }
+  
+  #combine all counts now that the genes have been matched
+  all.counts <- cbind(all.counts, counts)
+}
+all.counts <- as.matrix(all.counts)
+
+#create a sce that contains all the samples and their intersecting genes
+sce.S <- SingleCellExperiment(list(counts=all.counts))
+rownames(sce.S) <- rownames
+dim(sce.S)
+```
+
+
+--------------------- Linnarson 2018 data ---------------------
+- this study performed scRNA-seq on nervous system tissue via 10X Chromium single cell 3' solution under homeostatic conditions
+
+Load the Linnarson 2018 microglia loom file from http://mousebrain.org/loomfiles_level_L6.html 
+```{r}
+library(loomR)
+
+lfile <- connect(filename = "/Users/reganhamel/Dropbox (Cambridge University)/Lab/Regan/SCI scRNA-seq Project/Cx3cr1 Data/Universal Workflow/GEO Datasets/Linnarson MG 2018/l6_r4_microglia.loom", mode = "r+")
+
+# Extract the gene matrix
+gene.names <- lfile[["row_attrs/Gene"]][]
+cell_names <- lfile[["col_attrs/CellID"]][]
+
+# extract the experimental condition (ie HC vs activated)
+exp <- lfile$get.attribute.df()["Description"][,1]
+
+full.matrix <- t(lfile$matrix[, ])
+rownames(full.matrix) <- gene.names
+colnames(full.matrix) <- cell_names
+
+# convert to a sce
+sce.L <- SingleCellExperiment(list(counts = full.matrix))
+
+# label cells by experiment
+sce.L$exp <- exp
+
+# extract the HC cells
+sce.L <- sce.L[,-grep("activated", exp)]
+```
+
+--------------------- Movahedi 2019 data ---------------------
+- this study performed scRNA-seq on whole brain homogenates via 10X Chromium single cell 3' solution under homeostatic conditions
+
+Load the Movahedi 2019 WT homeostatic whole brain from http://www.brainimmuneatlas.org/download.php 
+```{r}
+library(DropletUtils)
+sce.M <- read10xCounts("/Users/reganhamel/Dropbox (Cambridge University)/Lab/Regan/SCI scRNA-seq Project/Cx3cr1 Data/Universal Workflow/GEO Datasets/Movahedi 2019/mm10")
+rownames(sce.M) <- rowData(sce.M)$Symbol
+
+metadata <- read.csv("/Users/reganhamel/Dropbox (Cambridge University)/Lab/Regan/SCI scRNA-seq Project/Cx3cr1 Data/Universal Workflow/GEO Datasets/Movahedi 2019/annot_K10.csv")
+
+# reorder the metadata to match the cell order in the sce
+colnames(sce.M) <- colData(sce.M)$Barcode
+barcodes <- as.factor(gsub("*.-1", "", colData(sce.M)$Barcode))
+metadata <- metadata[order(metadata$cell)[barcodes],]
+
+# add the column data
+sce.M$cell_type <- metadata$cluster
+
+#metadata and sce object are of different lengths, remove the 327 cells without labels
+sce.M <- sce.M[,!is.na(sce.M$cell_type)]
+
+# extract MG
+sce.M <- sce.M[,sce.M$cell_type == "Microglia"]
+```
+
+--------------------- Generate the Plot ---------------------
+
+Load the dissociation-associated genes from van den Brink et al., 2017
+```{r}
+# load the function to prep the gene list
+source("/Users/reganhamel/Documents/PhD/scRNAseq Workflow/PhD_Dissertation/Chapter_3/Sources/Fxn - Prep Genes.R")
+
+# load the gene list
+IEG<- read.table("/Users/reganhamel/Documents/PhD/scRNAseq Workflow/PhD_Dissertation/Chapter_3/Sources/IEGs List from van Oudenaarden (Nature Methods 2017).txt", header =F)
+
+# convert to a character vector
+IEG <- prepG(IEG, sep = "/n")
+IEG <- IEG[-1]
+
+# keep only the genes that are present in all 5 datasets
+IEG <- Reduce(intersect, list(IEG, rownames(sce.L), rownames(sce.SCI), rownames(sce.Y), rownames(sce.M), rownames(sce.S)))
+```
+
+Initiate the funciton to perform QC on each dataset
+```{r}
+library(EnsDb.Mmusculus.v79)
+library(scater)
+
+prepSCE <- function(sce, IEGs=IEG, name) {
+  #Identify mitochondrial genes 
+  # Identify the chromosomal location for each gene
+  rowData(sce)$CHR <- mapIds(EnsDb.Mmusculus.v79, keys=rownames(sce), 
+                             column="SEQNAME", keytype="SYMBOL")
+  
+  # Calculate QC metrics including the percent of counts from mitochondrial genes
+  sce <- perFeatureQCMetrics(sce, feature_controls=list(Mito=which(rowData(sce)$CHR =="MT"))) 
+  
+  #Remove low quality cells by UMI and gene counts thresholds and by percent of mitochondrial counts
+  # identify and remove cells by low gene or UMI counts
+  by.Genes <- sce$total_features_by_counts > 1000
+  by.UMI <- sce$total_counts > 1000
+  gene.UMI.keep <- by.Genes & by.UMI 
+  sce <- sce[,gene.UMI.keep]
+  
+  # identify and remove cells by high mitochondrial gene percent
+  mito <- sce$pct_counts_Mito > 5
+  sce.S <- sce[,!mito]
+  
+  # examine the number of cells removed by each metric
+  table(by.Genes, by.UMI)
+  table(mito)
+  
+  
+  #Calculate the percent of total genes from IEGs and save in a data frame
+  sce <- calculateQCMetrics(sce, feature_controls = list(IEGs = which(rownames(sce) %in% IEGs)))
+  
+  df <- data.frame(sce$pct_counts_IEGs, rep(name, ncol(sce)), sce$pct_counts_Mito, sce$log10_total_counts)
+  colnames(df) <- c("Pct", "Study", "Mito-preQC", "Logcounts-postQC")
+  
+  return(df)
+}
+```
+
+
+Prepare the data frames
+```{r}
+df.SCI <- prepSCE(sce.SCI, name="Healthy Control")
+
+df.M <- prepSCE(sce.M, name="Movahedi 2019")
+
+df.L <- prepSCE(sce.L, name="Linnarsson 2018")
+
+df.S <- prepSCE(sce.S, name="Stevens 2019")
+
+df.Y <- prepSCE(sce.Y, name="Yang 2018")
+```
+
+--------------------- Generate the Plot ---------------------
+```{r}
+library(RColorBrewer)
+# combine the plots
+df <- rbind(df.Y, df.L, df.S, df.M, df.SCI)
+
+#generate the violin plot
+ggplot(df, aes(x=Study, y=Pct)) + geom_violin(aes(fill = Study), color = NA) + stat_summary(fun=median, geom="point", size=1, color="black")  + ylab("% Counts from Dissociation/FACS Genes") + xlab(NULL)+ theme(axis.text.x = element_text(angle = 45, hjust = 1),legend.position = "none") + scale_fill_manual(values=brewer.pal(5, "Dark2"))  + ylim(0,5) + geom_hline(yintercept = 0.29, colour = "black", linetype="dotted")
+
+#save the plot and size as needed
+ggsave("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/IEG/IEGs(van den Brink list).png", height =4, width =5, scale = 1)
+```
+
+```{r}
+system("say done")
+```
+
