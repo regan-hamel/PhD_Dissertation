@@ -1,0 +1,53 @@
+---
+title: "Clustering"
+---
+
+#load sce from BC
+```{r}
+sce <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/2. BC/sce_postBC.RDS")
+
+dirC <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/3. Clustering/"
+```
+
+#cluster
+```{r}
+library(scran)
+set.seed(100)
+
+metadata(sce)$k <- 20
+#generate the shared nearest neighbour graph
+snn.gr <- buildSNNGraph(sce, use.dimred="corrected", k = metadata(sce)$k, type="jaccard") #k ranges from 5-100
+#the larger k (# of nn), the fewer the clusters, 20 is the default in Seurat, 10 in scran
+#lower k means the noise will have a greater impact on the clustering. Larger values are computationally expensive 
+
+#apply the louvain commuinity detection
+clusters <- igraph::cluster_louvain(snn.gr) 
+
+#store the clusters in the sce object column-based metadata
+sce$Cluster <- factor(clusters$membership)
+table(sce$Cluster)
+```
+
+```{r}
+library(scater)
+plotUMAP(sce, colour_by="Cluster")
+ggsave(filename = "Cluster.png", path = dirC, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
+
+```
+
+```{r}
+saveRDS(sce, "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/3. Clustering/sce.RDS")
+```
+
+# investigate the modularity between clusters
+```{r}
+#generating the modularity score to be used in the heatmap
+cluster.mod <- clusterModularity(snn.gr, sce$Cluster, get.weights=T)
+log.ratio <- log2(cluster.mod$observed/cluster.mod$expected + 1)
+
+#generating and saving the heatmap
+library(pheatmap)
+pheatmap(log.ratio, cluster_rows=FALSE, cluster_cols=FALSE, color=colorRampPalette(c("white", "#7A0177"))(100), filename = paste0(dirC, "modularity.png"), width = 5, height = 4)
+```
+
+
