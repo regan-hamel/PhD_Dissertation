@@ -1,0 +1,192 @@
+---
+title: "Quality Control"
+author: "Regan"
+date: "20/01/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Based on:
+https://github.com/MarioniLab/compareSingleCell/blob/master/vignettes/embryo_preprocess.Rmd
+
+This script labels samples with metadata (condition, sex, etc.) and performs the first pass removal of low-quality cells for each sample.
+
+# Import the Single Cell Experiments for each sample and set the parameters 
+```{r}
+library(DropletUtils)
+#initialise directories (dir), the sample metadata, and the number of samples (n)
+source("/Users/reganhamel/Documents/PhD/scRNAseq Workflow/PhD_Dissertation/Chapter_4/Sources/All_Cremato.R")
+
+#create a SingleCellExperiment object from the cleaned gene-count matrices
+for (i in 1:n) {
+  sceL <- eval(parse(text=paste0('sce',i)))
+  dirNN <- (paste0(dir0, sceL[1], "/EmptyDrops2/")) 
+  SCE <- read10xCounts(dirNN, col.names = TRUE)
+  
+  assign(paste('SCE',i,sep=''), SCE)
+  
+  rm (SCE)
+}
+
+```
+
+
+
+```{r}
+library(scater)
+library(scran)
+library(BiocParallel)
+library(EnsDb.Mmusculus.v79)
+library(org.Mm.eg.db)
+
+for (i in 1:n) {
+  sceL <- eval(parse(text=paste0('sce',i)))
+  sce <- eval(parse(text=paste0("SCE", i)))
+ # dir0 <- paste0(dir1, sceL[1], "/QC/") #set the directory
+ # dir.create(dir0)
+  # Assign each sample its respective metadata
+  
+  # Store sample-specific data in the order the sce objects were merged
+  ncol <- ncol(sce) 
+  for (j in 1:length(sce1)) { #there will always be a sce1 no matter the number of subsets or samples
+    x <- rep(sceL[j], ncol)   
+    assign(paste("x", j, sep =""), x)
+    
+    #clear x
+    rm(x)
+  }
+  rm(ncol)
+  
+  
+  # Subset the sce object to easily track the sample details
+  sce$sampleID <- x1
+  sce$condition <- x3 #HC vs SCI
+  sce$date <- x4 #date collected
+  sce$strain <- x5  #track the strain
+  sce$sex <- x7 #track the sex
+  sce$stage <- x8 #track the SCI day
+  sce$SLX <- x9 #track the batch
+  
+  #make sure all rownames are ENSEMBL:
+  if (rownames(sce)[1] == "ENSMUSG00000051951") {
+  } else { #for this dataset, there will be rowname issues from earlier pre-processing. Align them here
+    rownames(sce) <- rownames(SCE1)
+    
+    # print("row name issue")
+    # stop()
+  }
+  
+  #Identify the chromosomal location for each gene. Mito location is used for downstream QC"
+  rowData(sce)$SYMBOL <- mapIds(org.Mm.eg.db, keytype="ENSEMBL", 
+                                 keys=rownames(sce), column="SYMBOL")   
+  rowData(sce)$SYMBOL[is.na(rowData(sce)$SYMBOL)] <- names(rowData(sce)$SYMBOL)[is.na(rowData(sce)$SYMBOL)]
+  rowData(sce)$ENSEMBL <- rownames(sce)
+  
+  #convert rownames to symbol
+  rownames(sce) <- rowData(sce)$SYMBOL
+  rownames(sce) <- uniquifyFeatureNames(rownames(sce), rowData(sce)$SYMBOL)
+  
+  #Identify the chromosomal location for each gene. Ribo and mito location is used for downstream QC"
+  location <- mapIds(EnsDb.Mmusculus.v79, keys=rowData(sce)$ENSEMBL, 
+                     column="SEQNAME", keytype="GENEID")
+  rowData(sce)$CHR <- location
+  summary(location=="MT")
+  
+  if (summary(location == "MT")["TRUE"] != 13) {
+    print("error in MT gene mapping")
+    system("say mitokondrial error") #spelling mistake gives proper pronunciation
+    stop()
+  }
+  
+  
+  #calculate QC metrics per cell
+  qcstats <- perCellQCMetrics(sce, subsets=list(Mito=which(rowData(sce)$CHR =="MT"))) 
+  colData(sce) = cbind(colData(sce), qcstats)
+  
+  
+  # Compute size factors for normalization downstream
+  clusters <- quickCluster(sce, use.ranks=FALSE, method = "igraph", min.size = 100) #must set min.size, otherwise it takes forever
+  sce <- computeSumFactors(sce, min.mean=0.1, cluster=clusters, BPPARAM=SerialParam()) 
+  
+  # Save the post-QC sce for combining samples in the next step
+  assign(paste0("sce_", sceL[1]), sce)
+  
+  if(nrow(sce) != 22598) {
+    print("gene count issue, review")
+    stop()
+  }
+}
+
+system("say stage complete")
+```
+
+# Combine all samples
+- harmonize with caution
+```{r}
+# Assign the first sce to initialise the object
+sce_all <- eval(parse(text=paste0('sce_',sce1[1])))
+
+for (i in 2:n) { 
+  sceL <- eval(parse(text=paste0('sce',i)))
+  sce <- eval(parse(text=paste0('sce_',sceL[1])))
+  
+  #harmonize the SYMBOL and ENSEMBL row data (use with caution)
+  rowData(sce_all)@listData <-   rowData(sce)@listData
+  
+  #cbind
+  sce_all <- cbind(sce_all, sce)
+}
+
+nlevels(factor(sce_all$sampleID))
+```
+
+```{r}
+sce <- sce_all
+```
+
+#Add Symbols
+```{r}
+library(org.Mm.eg.db)
+
+# check for "uniquified names"
+combo_name <- grep("_", rownames(sce))
+
+#better to keep as ENSEMBL names (easier for downstream searching)
+rownames(sce)[combo_name] <- gsub("*_", "", rowData(sce)$ENSEMBL)[combo_name]
+combo_name2 <- grep("_", rownames(sce))
+
+# sanity check (should be 0)
+head(rownames(sce[combo_name2]))
+#rownames(sce[combo_name[1]])
+```
+
+# order levels in a more aesthetically pleasing fashion
+```{r}
+#order factors by time point
+
+sce$sampleID <- factor(sce$sampleID, levels = c("SIGAA10", "SIGAH2", "SIGAB11", "SIGAE5", "SIGAA1","SIGAF5","SIGAA7", "SIGAB7","SIGAC11","SIGAD11", "SIGAB10", "SIGAC10", "SIGAE3.D10", "SIGAF3.D10", "SIGAE5.D21", "SIGAF4", "SIGAF5.D21", "SIGAG4", "SIGAG5", "SIGAH5"))
+
+sce$stage <- factor(sce$stage, levels = c("HC", "1", "2", "3", "10", "21"))
+library(plyr)
+sce$stage <- revalue(sce$stage, c("HC"="Ctrl"))
+
+sce$date <- revalue(sce$date, c( "05-Jun-19" = "5-Jun-19"))
+sce$date <- revalue(sce$date, c( "17-Oct-19" = "31-Oct-19"))
+
+sce$date <- factor(sce$date, levels =c( "23-May-19","5-June-19", "26-Sep-19", "31-Oct-19",   "6-Mar-20",  "1-May-21" ))
+
+table(sce$stage, sce$date)
+table(sce$sampleID, sce$stage)
+
+```
+
+
+#save sce
+```{r}
+saveRDS(sce, file = paste0(dir1, "/preQC_sce.RDS"))
+```
+
+

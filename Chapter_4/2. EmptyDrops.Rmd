@@ -1,0 +1,102 @@
+---
+title: "2. EmptyDrops"
+author: "Regan"
+date: "29/01/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Based on:
+https://genomebiology.biomedcentral.com/articles/10.1186/s13059-019-1662-y  (paper)
+https://bioconductor.org/packages/release/bioc/manuals/DropletUtils/man/DropletUtils.pdf  (package documentation)
+
+This script will remove empty droplets from the unfiltered gene-counts matrices.
+
+# Import the Single Cell Experiments for each sample and set the parameters 
+```{r}
+library(DropletUtils)
+
+#initialise directories (dir), the sample metadata, and the number of samples (n)
+source("/Users/reganhamel/Documents/PhD/scRNAseq Workflow/PhD_Dissertation/Chapter_4/Sources/All_Cremato.R")
+
+
+#set the false discovery rate for the EmptyDrops function
+e <- 0.01
+
+#create a SingleCellExperiment object from the cleaned gene-count matrices
+for (i in 1:n) { #n = the number of samples
+  sceL <- eval(parse(text=paste0('sce',i)))
+  
+  #the directory to find the matrix
+  dirNN <- (paste0(dir0, sceL[1],"/", sceL[12], "/cleaned_counts")) 
+  
+  #try and see if you can load the cleaned counts
+  SCE <- try(read10xCounts(dirNN, col.names = TRUE))
+  
+  #if not, use the raw counts
+  if (class(SCE) == 'try-error') {
+    dirNN <- (paste0(dir0, sceL[1],"/", "raw_feature_bc_matrix")) 
+    SCE <- read10xCounts(dirNN, col.names = TRUE)
+    print(sceL[1]) #report which are using raw counts
+  }
+  assign(paste0('SCE',i), SCE)
+  
+  rm (SCE)
+}
+```
+
+# Remove empty drops for each sample, on a loop
+```{r}
+library(scater)
+
+for (i in 1:n) {
+  sce <- eval(parse(text=paste0('SCE',i))) #initialis sce as the SingleCellExperiment object
+  full.data <- sce #save a copy of the sce before you remove empty drops
+  sceL <- eval(parse(text=paste0('sce',i))) #initialise the sample metadata
+  dirI <- paste0(dir0, sceL[1],"/")
+  
+  #compute statistics for each cell barcode, including the rank (based on total UMI counts per cell), knee and inflection points, total number of counts per barcode, the fitted value
+  br.out <- barcodeRanks(counts(sce)) #input the count matrix from the sc
+  
+  # Generate and save the knee plot
+  pdf(paste0(dirI, sceL[1]," Empty Drops Knee Plot2.pdf"))
+  plot(br.out$rank, br.out$total, log="xy", xlab="(log) Rank", ylab="(log) Total UMI Counts per Barcode") 
+  o <- order(br.out$rank)
+  lines(br.out$rank[o], br.out$fitted[o], col="red")
+  abline(h=metadata(br.out)$knee, col="dodgerblue", lty=2)
+  abline(h=metadata(br.out)$inflection, col="forestgreen", lty=2)
+  legend("bottomleft", lty=2, col=c("dodgerblue", "forestgreen"), legend=c("knee", "inflection"))
+  dev.off()
+  
+  
+  # Call Empty drops to identify cells as those with barcode patterns that differ from the ambient (loose, free-floating RNA) patterns
+  set.seed(100)
+  e.out <- emptyDrops(counts(sce))
+  sum(e.out$FDR <= e, na.rm=TRUE) #e is set in the loading chunk
+  
+  
+  # Calculate the number of cells (vs empty droplets)
+  is.cell <- e.out$FDR <= e
+  sum(is.cell, na.rm=TRUE)
+  table(Limited=e.out$Limited, Significant=is.cell)
+  
+  
+  # Generate and save the diagnostics plot, counts vs -log probability, to visualize potential empty drops vs cells
+  pdf(paste0(dirI,"Diagnostic Plots2.pdf"))
+  plot(log10(e.out$Total), -e.out$LogProb, col=ifelse(is.cell, "red", "black"),
+       xlab="Log10 total UMI count", ylab="-Log Probability", xlim = c(x1 = 2, x2 = 4.5))
+  dev.off()
+  
+  
+  # Use the new filtered counts matrix from is.cell to create a filtered sce dataset
+  sce <- sce[,which(e.out$FDR <= e)]
+  
+  # Save as 10X counts, which can be easily loaded into SoupX (save in the CellRanger folder)
+  counts <- counts(sce)
+  write10xCounts(counts, path = paste0(dirI,"/EmptyDrops2/"))
+  saveRDS(e.out, paste0(dirI, "/e_out.RDS"))
+}
+```
