@@ -15,11 +15,11 @@ dirA <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/4. 
 ```{r}
 marker_gene_list <- list(
   Microglia = c( "Sparc", "C1qa", "Plxdc2","Serpine2", "P2ry12", "Tmem119", "Siglech", "Ctss", "Cst3", "Slc2a5"), # "Sall1" not in HVG
-  #CAMs = c("Mrc1", "Lyve1", "Cd163"), #low Siglec1 #no CAM genes in HVG
-  Dendritic_Cells = c("Cd74", "H2-Eb1", "H2-Aa"), #Itgax (expressed in activated MG too) #"Flt3", "Zbtb46" not in HVG
-  Monocyte = c("Chil3", "Plac8", "Ccr2"), #Vim (expressed in others)
+  #CAMs = c("Mrc1", "Lyve1", "Cd163", "Cbr2), #low Siglec1 #no CAM genes in HVG
+  Dendritic_Cells = c("Cd74", "H2-Eb1", "H2-Aa", "Plac8", "H2-Ab1", "H2-DMb1", "H2-DMa", "Klrd1"), #Itgax (expressed in activated MG too) #"Flt3", "Zbtb46" not in HVG
+  Monocyte = c("Chil3", "Plac8", "Ccr2", "Rgs1", "Fn1"), #Vim (expressed in others)
   Macrophage = c("Ms4a7", "Ecm1", "Arg1", "Ccl7", "Mgst1"), 
-  Neutrophil = c("S100a8", "S100a9", "Lcn2", "Dedd2") #"Ly6g" not in HVG
+  Neutrophil = c("S100a8", "S100a9", "Lcn2", "Dedd2", "Retnlg", "Wfdc21", "Mmp9") #"Ly6g" not in HVG
 #  TCell = c("Cd2",   "Cd3d",  "Cd3e",  "Cd3g",  "Cd28",  "Cd4",   "Ptprc") #"Vim" #no TCell genes in hVGs
 )
 
@@ -105,7 +105,7 @@ sce$cell_type <- sce$cell_type_ca
 list <- list(
   "1"="Microglia",
   "2"="Macrophage",
-  "3"="Macrophage",
+  "3"="Monocyte",
   "4"="Neutrophil",
   "5"="Microglia",
   "6"=NULL,
@@ -133,6 +133,18 @@ sce$cell_type[sce$Cluster == 10 & sce$cell_type_ca == "Neutrophil"] <- "Microgli
 table(sce$Cluster, sce$cell_type)
 
 ```
+
+#remove the na.s
+```{r}
+#check for NAs
+sce$Cluster[is.na(sce$cell_type)]
+
+#correct NAs based on majority in that cluster
+sce$cell_type[is.na(sce$cell_type) & sce$Cluster == 2]<- 'Macrophage'
+sce$cell_type[is.na(sce$cell_type) & sce$Cluster == 3]<- 'Macrophage'
+sce$cell_type[is.na(sce$cell_type) & sce$Cluster == 10] <- "Microglia"
+```
+
 
 ```{r}
 library(scater)
