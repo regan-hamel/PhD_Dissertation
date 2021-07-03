@@ -228,15 +228,15 @@ prepSCE <- function(sce, IEGs=IEG, name) {
 
 Prepare the data frames
 ```{r}
-df.SCI <- prepSCE(sce.SCI, name="Healthy Control")
+df.SCI <- prepSCE(sce.SCI, name="Ctrl (F)")
 
-df.M <- prepSCE(sce.M, name="Movahedi 2019")
+df.M <- prepSCE(sce.M, name="Van Hove et al., 2019 (E)")
 
-df.L <- prepSCE(sce.L, name="Linnarsson 2018")
+df.L <- prepSCE(sce.L, name="Zeisel et al., 2018")
 
-df.S <- prepSCE(sce.S, name="Stevens 2019")
+df.S <- prepSCE(sce.S, name="Hammond et al., 2019 (F)")
 
-df.Y <- prepSCE(sce.Y, name="Yang 2018")
+df.Y <- prepSCE(sce.Y, name="Arneson et al., 2018 (E)")
 ```
 
 --------------------- Generate the Plot ---------------------
@@ -246,10 +246,10 @@ library(RColorBrewer)
 df <- rbind(df.Y, df.L, df.S, df.M, df.SCI)
 
 #generate the violin plot
-ggplot(df, aes(x=Study, y=Pct)) + geom_violin(aes(fill = Study), color = NA) + stat_summary(fun=median, geom="point", size=1, color="black")  + ylab("% Counts from Dissociation/FACS Genes") + xlab(NULL)+ theme(axis.text.x = element_text(angle = 45, hjust = 1),legend.position = "none") + scale_fill_manual(values=brewer.pal(5, "Dark2"))  + ylim(0,5) + geom_hline(yintercept = 0.29, colour = "black", linetype="dotted")
+ggplot(df, aes(x=Study, y=Pct)) + geom_violin(aes(fill = Study), color = NA) + stat_summary(fun=median, geom="point", size=1, color="black")  + ylab("% dissociation or FACS logcounts") + xlab(NULL)+ theme(axis.text.x = element_text(angle = 20, hjust = 1),legend.position = "none") + scale_fill_manual(values=brewer.pal(5, "Dark2"))  + ylim(0,5) + geom_hline(yintercept = 0.29, colour = "black", linetype="dotted")
 
 #save the plot and size as needed
-ggsave("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/IEG/IEGs(van den Brink list).png", height =4, width =5, scale = 1)
+ggsave("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/IEG/IEGs(van den Brink list).png", height =4, width =9, scale = 1)
 ```
 
 ```{r}
