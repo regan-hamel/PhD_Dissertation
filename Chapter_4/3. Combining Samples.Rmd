@@ -173,13 +173,18 @@ sce$stage <- factor(sce$stage, levels = c("HC", "1", "2", "3", "10", "21"))
 library(plyr)
 sce$stage <- revalue(sce$stage, c("HC"="Ctrl"))
 
-sce$date <- revalue(sce$date, c( "05-Jun-19" = "5-Jun-19"))
+sce$date <- revalue(sce$date, c( "05-Jun-19" = "5-June-19"))
+sce$date[is.na(sce$date)] <- "5-June-19"
 sce$date <- revalue(sce$date, c( "17-Oct-19" = "31-Oct-19"))
 
 sce$date <- factor(sce$date, levels =c( "23-May-19","5-June-19", "26-Sep-19", "31-Oct-19",   "6-Mar-20",  "1-May-21" ))
 
 table(sce$stage, sce$date)
 table(sce$sampleID, sce$stage)
+table(sce$stage, sce$sampleID)
+
+sce$strain <- revalue(sce$strain, c( "CreRFP" = "Resident"))
+sce$strain <- revalue(sce$strain, c( "CreYFP" = "Infiltrating"))
 
 ```
 
