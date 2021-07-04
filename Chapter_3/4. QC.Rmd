@@ -24,6 +24,11 @@ stage = "PreQC, combined" #specify the stage for the plotting function
 source("/Users/reganhamel/Documents/PhD/scRNAseq Workflow/PhD_Dissertation/Chapter_3/Sources/Fxn - qcPlots.R", echo = TRUE)
 ```
 
+```{r}
+library(plyr)
+sce$stage <- revalue(sce$stage, c("HC"="Ctrl"))
+```
+
 
 
 #plot the library size and complexity for each sample
@@ -33,12 +38,12 @@ library(ggplot2)
 library(scater)
 
 #set the dir
-path <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/QC/violin plots/"
+path <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/1. QC/violin plots/"
 
 y <- "log10sum"
 sce$log10sum <- log10(sce$sum)
 sce$log10detected <- log10(sce$detected)
-c_by <- "subsets_Mito_percent"
+c_by <- "stage"
 #to plot coldata
 p <- plotColData(
   sce,
@@ -49,7 +54,7 @@ p <- plotColData(
 
 p
 #save
-#ggsave(paste0(path,"violin-",y,  "-", c_by, "-pre QC.png"), scale=1.5, height=2.5, width =8)
+ggsave(paste0(path, y,  "-", c_by, "-pre QC.png"), scale=1.5, height=2.5, width =8)
 ```
 
 # SIGAH9 removed for low lib size/complexity and high mito
