@@ -14,7 +14,7 @@ Based on:
 Haghverdi, L., A. T. L. Lun, M. D. Morgan, and J. C. Marioni. 2018. “Batch effects in single-cell RNA-sequencing data are corrected by matching mutual nearest neighbors.” Nat. Biotechnol. 36 (5): 421–27.
 
 
-In this Rmd we normalise the samples, perform batch correction, cluster cells, and screen for low quality clusters.
+In this Rmd we normalise the samples, select HVGs, and perform batch correction.
 
 # Load the single cell experiments for each sample and set the parameters 
 ```{r}
@@ -32,9 +32,13 @@ subset <- "date" #all cells from a given collection date lane will be combined i
 sce$subset <- droplevels(factor(colData(sce)[subset][,1]))
 
 #set the subset for normalisation, normalise by date except for the three sample that had a second round of sequencing
-library(plyr)
-sce$batch <- sce$sampleID
-sce$batch <- revalue(sce$batch, c("SIGAF9"="28-Mar-19", "SIGAG9.D1"="28-Mar-19", "SIGAH11"="9-Apr-19", "SIGAE11"="20-Jul-19", "SIGAF11"="20-Jul-19", "SIGAE3"="10-Jan-19", "SIGAD3"="10-Jan-19", "SIGAE10"="23-May-19", "SIGAF10"="23-May-19", "SIGAG11.D21"="9-Apr-19"))
+sce$batch <- sce$SLX
+
+#samples with unique SLX combos
+b <- c( "SIGAG11.D2", "SIGAD10", "SIGAG9.D3", )
+for (i in b) {
+sce$batch[sce$sampleID == i] <- i
+}
 
 table(sce$batch)
 ```
