@@ -7,20 +7,20 @@ library(SingleCellExperiment)
 library(stringr)
 
 sce <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/3. Clustering/sce.RDS")
-dirA <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/4. Cellassign/"
+dirA <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/4. CellAssign/"
 ```
 
 
 #set the marker lists for the cell types of interest
 ```{r}
 marker_gene_list <- list(
-  Microglia = c( "Sparc", "C1qa", "Plxdc2","Serpine2", "P2ry12", "Tmem119", "Siglech", "Ctss", "Cst3", "Slc2a5"), # "Sall1" not in HVG
-  #CAMs = c("Mrc1", "Lyve1", "Cd163", "Cbr2), #low Siglec1 #no CAM genes in HVG
-  Dendritic_Cells = c("Cd74", "H2-Eb1", "H2-Aa", "Plac8", "H2-Ab1", "H2-DMb1", "H2-DMa", "Klrd1"), #Itgax (expressed in activated MG too) #"Flt3", "Zbtb46" not in HVG
+  Microglia = c( "Sparc", "C1qa", "Plxdc2","Serpine2", "P2ry12", "Tmem119", "Siglech", "Ctss", "Cst3", "Slc2a5", "Sall1"), # "Sall1" not in HVG
+  CAMs = c("Mrc1", "Lyve1", "Cd163", "Cbr2"), #low Siglec1 #no CAM genes in HVG
+  Dendritic_Cells = c("Cd74", "H2-Eb1", "H2-Aa", "Plac8", "H2-Ab1", "H2-DMb1", "H2-DMa", "Klrd1", "Flt3", "Zbtb46"), #Itgax (expressed in activated MG too) # not in HVG
   Monocyte = c("Chil3", "Plac8", "Ccr2", "Rgs1", "Fn1"), #Vim (expressed in others)
   Macrophage = c("Ms4a7", "Ecm1", "Arg1", "Ccl7", "Mgst1"), 
-  Neutrophil = c("S100a8", "S100a9", "Lcn2", "Dedd2", "Retnlg", "Wfdc21", "Mmp9") #"Ly6g" not in HVG
-#  TCell = c("Cd2",   "Cd3d",  "Cd3e",  "Cd3g",  "Cd28",  "Cd4",   "Ptprc") #"Vim" #no TCell genes in hVGs
+  Neutrophil = c("S100a8", "S100a9", "Lcn2", "Dedd2", "Retnlg", "Wfdc21", "Mmp9", "Ly6g"), # not in HVG
+ TCell = c("Cd2",   "Cd3d",  "Cd3e",  "Cd3g",  "Cd28",  "Cd4","Ptprc") #"Vim" #no TCell genes in hVGs
 )
 
 
@@ -29,6 +29,7 @@ library(cellassign)
 
 markers <- c(marker_gene_list)#, pre_set)
 marker_mat <- marker_list_to_mat(markers)
+
 head(rownames(marker_mat))
 
 #remove marker genes not in the HVG list
@@ -85,8 +86,8 @@ saveRDS(sce, paste0(dirA, "sce.RDS"))
 
 ```{r}
 library(scater)
-plotUMAP(sce, colour_by="cell_type_ca")
-ggsave(filename = "cell_type_CA.png", path = dirA, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
+plotUMAP(sce, colour_by="cell_type")
+ggsave(filename = "cell_type_BC.png", path = dirA, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
 
 ```
 
