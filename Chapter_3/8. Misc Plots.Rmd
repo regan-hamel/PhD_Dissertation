@@ -13,7 +13,7 @@ sce <- sce_comp <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Cha
 
 
 #reorder the cell types for aesthetics 
-sce_comp$cell_type <- sce$cell_type <- factor(sce_comp$cell_type, levels=c("Neutrophil","Dendritic_Cells","Macrophage","Microglia"))
+sce_comp$cell_type <- sce$cell_type <- factor(sce_comp$cell_type, levels=c("CAMs","TCell","Monocyte","Neutrophil","Dendritic_Cells","Macrophage","Microglia"))
 
 dirP <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/Misc Plots/"
 ```
@@ -26,11 +26,11 @@ library(plyr)
 
 
 # set HC to 0
-sce_comp$stage <- factor(sce_comp$stage, levels = c("HC","0", "1", "2", "3", "10", "21"))
-sce_comp$stage[sce_comp$stage == "HC"] <- 0
+sce_comp$stage <- factor(sce_comp$stage, levels = c("Ctrl","0", "1", "2", "3", "10", "21"))
+sce_comp$stage[sce_comp$stage == "Ctrl"] <- 0
 
 # set the x and y values for the plot
-y <- sce_comp$Cluster
+y <- sce_comp$cell_type
 x <- droplevels(factor(sce_comp$stage))
 
 # create the df containing the x and y values
@@ -55,7 +55,7 @@ data <- data  %>%
 # Plot
 # Plot
 ggplot(data, aes(x=time, y=percentage, fill=group)) + 
-  geom_area(alpha=0.7 , size=0.5, colour="black") + ylab("Fraction of Cells") + scale_x_continuous(name ="Day Post-SCI", breaks=c(0,1,2, 3, 10, 21), labels=c("0"="HC","1"="1","2"="2", "3"="3", "10"="10", "21"="21"))+ scale_fill_brewer(palette="Accent", direction=-1)
+  geom_area(alpha=0.7 , size=0.5, colour="black") + ylab("Fraction of Cells") + scale_x_continuous(name ="Day Post-SCI", breaks=c(0,1,2, 3, 10, 21), labels=c("0"="Ctrl","1"="1","2"="2", "3"="3", "10"="10", "21"="21"))+ scale_fill_brewer(palette="Accent", direction=-1)
 
 
 ggsave(paste0(dirP, "/Composition Area Plot cluster.png"), height=5, width=6)
