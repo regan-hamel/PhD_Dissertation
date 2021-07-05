@@ -64,13 +64,13 @@ system("say assignment done")
 #We can access the maximum likelihood estimates (MLE)  of cell type using the `celltypes` function:
 
 ```{r}
-summary(factor(celltypes(fit, assign_prob = .95)))
+summary(factor(celltypes(fit, assign_prob = .80)))
 
 ```
 
 # save the predicted cell type in the sce
 ```{r}
-sce$cell_type_ca <- celltypes(fit, assign_prob = .95)
+sce$cell_type_ca <- celltypes(fit, assign_prob = .80)
 ```
 
 ```{r}
@@ -86,8 +86,8 @@ saveRDS(sce, paste0(dirA, "sce.RDS"))
 
 ```{r}
 library(scater)
-plotUMAP(sce, colour_by="cell_type")
-ggsave(filename = "cell_type_BC.png", path = dirA, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
+plotUMAP(sce, colour_by="cell_type_ca")
+ggsave(filename = "cell_type_BC_CA.png", path = dirA, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
 
 ```
 
