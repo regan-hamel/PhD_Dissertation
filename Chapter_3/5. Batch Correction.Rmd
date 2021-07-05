@@ -205,10 +205,10 @@ ggsave(filename = "post_sampleID_full.png", path = dirBC, scale = 1, width = 8, 
 
 #rename levels to include NA for those not of interest
 sce_BC$grey <- sce_BC$sampleID 
-sce_BC$grey[sce_BC$grey  != "SIGAE3" & sce_BC$grey !=  "SIGAG9.D3"] <- NA
+sce_BC$grey[sce_BC$grey  != "SIGAF9" & sce_BC$grey !=  "SIGAG9.D1" & sce_BC$grey !=  "SIGAH11"] <- NA
 
 #plot
-plotUMAP(sce_BC, colour_by="grey") + scale_fill_manual(values = c("#D53E4F", "#542788"), aesthetics = "fill", na.value = "grey90") + theme(plot.title = element_text(size = rel(2)))
-ggsave(filename = "post_sampleID_E3_G9.D3.png", path = dirBC, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
+plotUMAP(sce_BC, colour_by="grey") + scale_fill_manual(values=c("#A6CEE3", "#FDBF6F", "#B2DF8A"), aesthetics = "fill", na.value = "grey90") + theme(plot.title = element_text(size = rel(2)))
+ggsave(filename = "postBC_sampleID_1dpi.png", path = dirBC, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
 
 ```
