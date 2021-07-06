@@ -15,7 +15,7 @@ dirA <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/4. 
 ```{r}
 marker_gene_list <- list(
   Microglia = c( "Sparc", "C1qa", "Plxdc2","Serpine2", "P2ry12", "Tmem119", "Siglech", "Ctss", "Cst3", "Slc2a5", "Sall1"), # "Sall1" not in HVG
-  CAMs = c("Mrc1", "Lyve1", "Cd163", "Cbr2"), #low Siglec1 #no CAM genes in HVG
+  CAMs = c("Mrc1", "Lyve1", "Cd163", "Cbr2", "Ms4a7", "Cd74"), #low Siglec1 #no CAM genes in HVG
   Dendritic_Cells = c("Cd74", "H2-Eb1", "H2-Aa", "Plac8", "H2-Ab1", "H2-DMb1", "H2-DMa", "Klrd1", "Flt3", "Zbtb46"), #Itgax (expressed in activated MG too) # not in HVG
   Monocyte = c("Chil3", "Plac8", "Ccr2", "Rgs1", "Fn1"), #Vim (expressed in others)
   Macrophage = c("Ms4a7", "Ecm1", "Arg1", "Ccl7", "Mgst1"), 
