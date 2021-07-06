@@ -257,9 +257,12 @@ qcplot(dat$x, dat$y, data = dat, colour = sce$doublet, xlab = "Log10 UMI counts"
 #ggsave(paste0(path,"mito_dot-pre QC.png"), scale=1)
 ```
 
-#remove doublets
+#remove doublets & failed samples
 ```{r}
 sce <- sce[,!sce$doublet]
+sce <- sce[,sce$sampleID != "SIGAC10" & sce$sampleID != "SIGAH5" ]
+sce$sampleID <- droplevels(sce$sampleID)
+
 saveRDS(sce, paste0(dirA, "sce.RDS"))
 ```
 
