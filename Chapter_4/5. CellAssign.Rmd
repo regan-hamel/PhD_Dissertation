@@ -15,7 +15,7 @@ dirA <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 4/scRNAseq/3. 
 ```{r}
 marker_gene_list <- list(
   Microglia = c( "Sparc", "C1qa", "Plxdc2","Serpine2", "P2ry12", "Tmem119", "Siglech", "Ctss", "Cst3", "Slc2a5", "Sall1"), # "Sall1" not in HVG
-  CAMs = c("Mrc1", "Lyve1", "Cd163", "Cbr2"), #low Siglec1 #no CAM genes in HVG
+  CAMs = c("Mrc1", "Lyve1", "Cd163", "Cbr2", "Ms4a7", "Cd74"), #low Siglec1 #no CAM genes in HVG
   Dendritic_Cells = c("Cd74", "H2-Eb1", "H2-Aa", "Plac8", "H2-Ab1", "H2-DMb1", "H2-DMa", "Klrd1", "Flt3", "Zbtb46"), #Itgax (expressed in activated MG too) # not in HVG
   Monocyte = c("Chil3", "Plac8", "Ccr2", "Rgs1", "Fn1"), #Vim (expressed in others)
   Macrophage = c("Ms4a7", "Ecm1", "Arg1", "Ccl7", "Mgst1"), 
@@ -140,11 +140,11 @@ table(sce$strain, sce$cell_type)
 list <- list(
   "1"="Microglia",
   "2"="Dendritic_Cells",
-  "3"="Monoctye",
+  "3"="Monocyte",
   "4"="Dendritic_Cells",
   "5"="Dendritic_Cells",
   "6"=NULL,
-  "7"="Monoctye",
+  "7"="Monocyte",
   "8"="Macrophage",
   "9"="Macrophage",
   "10"="Neutrophil",
@@ -189,6 +189,18 @@ sce$cell_type[sce$strain == "Infiltrating" & sce$cell_type == "Microglia"] <- "M
 sce$cell_type[sce$strain == "Resident" & sce$cell_type == "Macrophage"] <- "Microglia"
 
 table(sce$strain, sce$cell_type)
+```
+
+#annotate CAMs
+```{r}
+cd74 <- counts(sce)["Cd74",] > 0
+mrc1 <- counts(sce)["Mrc1",] > 0 
+ms4a7 <- counts(sce)["Ms4a7",] > 0 
+CAMs <- (cd74 & mrc1 & ms4a7 & sce$strain == "Resident")
+
+table(sce[,CAMs]$cell_type)
+
+sce$cell_type[CAMs] <- "CAMs"
 ```
 
 #remove the na.s
