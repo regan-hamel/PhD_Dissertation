@@ -1,0 +1,258 @@
+---
+title: "Comparisons w other myeloid data"
+---
+
+#load sce & directory
+```{r}
+sce <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/sce.RDS")
+
+#the changes below were made to the BC sce and then saved into a new Ch5 version
+#sce$cell_type[sce$cell_type == "Monoctye"] <- 'Monocyte'
+#sce$cell_type <- factor(sce$cell_type, levels = c("Microglia", "Macrophage", "Monocyte", "Dendritic_Cells", "Neutrophil", "CAMs", "TCell"))
+#sce$stage <- factor(sce$stage, levels = c("Ctrl", 1, 2, 3, 10, 21))
+#colnames(sce) <- make.unique(colnames(sce), sep = "X")
+
+path <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/1. Comparing w lit/"
+```
+
+# Fig 2a, MG downregulate canonical marker genes. Seurat dot plot
+```{r}
+library(Seurat)
+library(ggplot2)
+
+
+# extract the MG and convert the sce to a Seurat object
+seur <- as.Seurat(sce[,sce$cell_type == "Microglia"], data="logcounts", assay="logcounts")
+
+MG_genes <- c("Olfml3","Sparc", "Trem2", "C1qa", "C1qb",  "Ctss","Csf1r", "Hexb","Gpr34", "P2ry12","Plxdc2", "Sall1", "Siglech","Cx3cr1","Tmem119","Serpine2")
+
+DotPlot(seur,
+        features=MG_genes,
+        group.by = "stage",
+        cols = "RdBu",
+        scale =F,
+        assay="logcounts") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+ggsave(paste0(path,"/Fig 2a - MG markers-legend.png"), width = 8, height = 20)
+```
+
+
+#Fig 2/sup fig box plots
+
+Set the gene lists of interest
+```{r}
+MG <- c("P2ry12","Plxdc2", "Siglech", "Sparc","Serpine2")
+names(MG) <- "MG"
+
+MG_MCd <- c("Tmem119", "Gpr34", "Olfml3")
+names(MG_MCd) <- "MG_MCd"
+
+Myel <- c("Aif1", "Hexb", "Fcrls","C1qa", "Trem2")
+names(Myel) <- "Myel"
+
+YFP <- c("S100a11", "Ms4a7", "Chil3", "Mgst1", "Ccl7", "Arg1")
+names(YFP) <- "Infiltrating"
+```
+
+Generate the boxplots for the genes of interest (Welch t-Test)
+```{r}
+library(ggplot2)
+library(RColorBrewer)
+library(ggpubr)
+# set the genes of interest
+genes <- list
+x <- sce$stage
+col <- droplevels(factor(sce$cell_type))
+
+for (i in genes) {
+  
+  logs <- as.numeric(logcounts(sce[i]))
+  df <- data.frame(Logs=logs, x=x, colour=col)
+  
+
+  #add empty slots for Ctrl to keep the spacing
+  df.a <- data.frame(Logs=c(0,0,0, 0, 0), x=c("Ctrl", "Ctrl", "Ctrl", "10", "21"), colour=c("Monocyte", "Dendritic_Cells", "Neutrophil", "Neutrophil", "Neutrophil"))
+  df <- rbind(df, df.a)
+  comparisons = list(c("Ctrl", "1"), c("Ctrl", "2"), c("Ctrl", "3"), c("Ctrl", "10"), c("Ctrl", "21"))
+  
+  # if (names(genes) == "MG" | names(genes) == "MG_MCd") {
+  #   sym <- list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), symbols = c("****", "***", "**", "*", "ns"))
+  #   statP <- stat_compare_means(method = "t.test", comparisons = comparisons, symnum.args = sym)
+  # } else { 
+  #   statP <- NULL
+  # }
+  ggplot(data=df, aes(y=Logs, x=x, fill=colour)) + geom_boxplot() + ggtitle(i) + theme(plot.title=element_text(hjust=0.5), legend.position="none") + ylab("logcounts") + xlab("dpi") + scale_fill_brewer(palette="Accent", direction=1) #+ statP
+  
+  ggsave(paste0(path,"boxplots/", i, ".png"), scale=1, height=5, width =5)
+}
+```
+
+
+## Heatmap
+```{r}
+sce.hm <- sce
+# add an X to the end of the second instance of each duplicated barcode to give it a unique name (the heatmap code requires unique barcodes)
+names <- make.unique(colnames(sce.hm), sep="X")
+
+# rename the barcodes in the sce object of duplicated cell names
+colnames(sce.hm) <- names
+```
+
+
+Reorder and label the cell types
+```{r}
+#Set the gene lists of interest
+MG <- c("P2ry12","Plxdc2", "Siglech", "Sparc","Serpine2")
+names(MG) <- "MG"
+
+MG_MCd <- c("Tmem119", "Gpr34", "Olfml3","Fcrls")
+names(MG_MCd) <- "MG_MCd"
+
+Myel <- c("Aif1", "Hexb", "C1qa", "Trem2")
+names(Myel) <- "Myel"
+
+YFP <- c("S100a11", "Ms4a7", "Chil3", "Mgst1", "Ccl7", "Arg1")
+names(YFP) <- "Infiltrating"
+
+
+#order the factors
+sce.hm$cells_cond <- paste0(sce$cell_type, "-", sce$stage)
+
+sce.hm$cells_cond <- droplevels(factor(sce.hm$cells_cond))
+
+sce.hm$cells_cond <- factor(sce.hm$cells_cond, levels = c("Microglia-Ctrl", "Microglia-1", "Microglia-2","Microglia-3", "Microglia-10","Microglia-21", "Macrophage-Ctrl", "Macrophage-1", "Macrophage-2",  "Macrophage-3", "Macrophage-10", "Macrophage-21","Monocyte-Ctrl", "Monocyte-1", "Monocyte-2", "Monocyte-3", "Monocyte-10", "Monocyte-21","Dendritic_Cells-Ctrl", "Dendritic_Cells-1", "Dendritic_Cells-2", "Dendritic_Cells-3", "Dendritic_Cells-10", "Dendritic_Cells-21", "Neutrophil-1", "Neutrophil-2", "Neutrophil-3",  "Neutrophil-10", "CAMs-Ctrl", "CAMs-1", "CAMs-3", "CAMs-2", "CAMs-10", "CAMs-21",  "TCell-Ctrl", "TCell-1", "TCell-2", "TCell-3", "TCell-10", "TCell-21"))
+```
+
+Generate and save the heatmap
+```{r}
+list <- c(MG, MG_MCd, Myel, YFP)
+
+plotHeatmap(sce.hm, features=list, exprs_values="logcounts", cellheight=5, cellwidth=0.01, cluster_cols=F, cluster_rows=F, columns=order(sce.hm$cells_cond), colour_columns_by=c("cell_type", "stage"), file=paste0(path, "HM MG.png"), fontsize=5, show_rownames=T, center=F, symmetric=F)
+```
+
+
+#area plot
+Generate the area plot (using sce_comp)
+```{r}
+gene <- "Serpine2"
+fl <- "Resident"
+sce_comp <- sce[,sce$cell_type == "Microglia" | sce$cell_type == 'CAMs']#  & sce$cell_type != "CAMs" ]
+sce_comp$gene <- counts(sce_comp)[gene,] > 0
+temp <- c("#D53E4F", "#FF8D59","#E6F598","#1A9850","#3288BD", "#542788")
+
+```
+
+```{r}
+#count the number of genes of a certain UMI per cluster
+# set the x and y values for the plot
+y <- sce_comp$gene
+sce_comp$stage <- factor(sce_comp$stage, levels = c("Ctrl","0", "1", "2", "3", "10", "21"))
+sce_comp$stage[sce_comp$stage == "Ctrl"] <- 0
+
+x <- (factor(sce_comp$stage))
+
+# create the df containing the x and y values
+df <- as.data.frame(table(y, x))
+colnames(df) <- c("y", "x", "Freq")
+
+# create data
+cluster <- as.numeric(levels(df$x)[df$x]) # x Axis
+value <- as.numeric(df$Freq)             # y Axis
+group <- df$y       # group, one shape per group
+data <- data.frame(cluster, value, group)
+
+
+# plot
+# Compute percentages with dplyr
+data <- data  %>%
+  group_by(cluster, group) %>%
+  summarise(n = sum(value)) %>%
+  mutate(percentage = n / sum(n))
+
+d <- data[data$group !=F,]
+
+pdf(paste0(path, gene,"_", fl, ".pdf"), height = 5, width = 3)
+barplot(height = (d$percentage)*100, space=0.1, names.arg = levels(sce$stage), xlab = level.n, ylab = "Fraction of Cells (%)", ylim = c(0,100), col=temp, beside=T) 
+dev.off()
+```
+
+
+#Heatmap of HEG
+#calculate the most highly expressed genes
+```{r}
+library(scater)
+path <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/1. Comparing w lit/Apoe/"
+sce.hm <- sce
+# add an X to the end of the second instance of each duplicated barcode to give it a unique name (the heatmap code requires unique barcodes)
+names <- make.unique(colnames(sce.hm), sep="X")
+colnames(sce.hm) <- names # rename the barcodes in the sce object of duplicated cell names
+
+genesHC <- sort(calculateAverage(sce[,sce$stage == "Ctrl"]), decreasing = T)
+
+genesSCI <- sort(calculateAverage(sce[,sce$condition == "SCI"]), decreasing = T)
+```
+
+```{r}
+list <- unique(names(c(genesHC[1:15], genesSCI[1:15])))
+
+#Generate and save the heatmap
+plotHeatmap(sce.hm, features=list, exprs_values="logcounts", cellheight=5, cellwidth=0.01, cluster_cols=F, cluster_rows=F, columns=order(sce.hm$cells_cond), colour_columns_by=c("cell_type", "stage"), file=paste0(path, "Top expressed.png"), fontsize=5, show_rownames=T, center=F, symmetric=F)
+```
+
+
+#Heatmap of DAMS
+```{r}
+#load the sce
+path <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/1. Comparing w lit/Apoe/"
+sce.hm <- sce
+
+source("/Users/reganhamel/Documents/PhD/scRNAseq Workflow/PhD_Dissertation/Chapter_5/Sources/Fxn - Prep Genes.R")
+
+#Establish the DAM gene lists (from Keren-Shaul et al., 2017; Figure 6)
+
+#homeostatic genes
+hG <- c("Cst3, Ctsd, Csf1r, Ctss, Sparc, C1qa, C1qb, Hexb, Cx3cr1, P2ry12, Cd33, Tmem119")
+# DAM phase 1 (Trem independent)
+DAM1 <- c("Apoe, Tyrobp, Ctsb, Ctsd, B2m, Fth1, Lyz2") 
+
+# DAM phase 2 (Trem dependent)
+DAM2 <- c("Trem2, Axl, Cst7, Ctsl, Lpl, Cd9, Csf1, Ccl6, Itgax, Clec7a, Lilrb4a, Timp2")  
+
+# separate the string
+hG <- prepG(hG, sep = ", ")
+DAM1 <- prepG(DAM1, sep = ", ")
+DAM2 <- prepG(DAM2, sep = ", ")
+
+list <- c(hG, DAM1, DAM2)
+
+#keep only genes in HVGs
+list[!(list %in% rownames(sce))]
+list <- list[(list %in% rownames(sce))] #Lilrb4a" removed
+
+#Generate and save the heatmap
+plotHeatmap(sce.hm, features=list, exprs_values="logcounts", cellheight=5, cellwidth=0.01, cluster_cols=F, cluster_rows=F, columns=order(sce.hm$cells_cond), colour_columns_by=c("cell_type", "stage"), file=paste0(path, "DAMs.png"), fontsize=5, show_rownames=T, center=F, symmetric=F)
+```
+
+#M1/M2 heatmap
+```{r}
+path <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/1. Comparing w lit/"
+sce.hm <- sce
+
+#macrophage identities from the Zhang 2015 review & Milich 2021
+M1 <- c("Il1a, Il1b, Il6, Il12a, Il12b, Il27, Il23a, Fcgr3, Fcgr2b, Ccl2, Ccl1, Il12a, Cxcl2, Cxcl13, Csf2, Csf3, Cd86, Marco, Nos2, Stat1, Irf5, Jun, Peli1, Tnf, Tnfaip3, Nfkbiz, Socs3") #not in HVG:
+
+M2 <- c("Arg1, Chil3, Mrc1, Retnla, Igf1, Il1rn, Stat6, Klf2, Irf4, Pparg, Ppara, Ppard, Clec10a, Rnase2a, Ccl8, Ccl17, Ccl22, Ccl24, Cdh1, Ear2, Pdcd1lg2, Socs2")
+
+#M2b <- c("Il10, Il6, Vegfa, Igf1, Cd86, Tnf, Fcgr1")
+
+#M2c <- c("Tgfb1, Mrc1, Cd163, Slamf1, Sphk1, Thbs1, Hmox1, Stat3")
+
+#keep only genes in HVGs
+list <- prepG(c(M2), sep = ", ")
+list[!(list %in% rownames(sce))]
+list <- list[(list %in% rownames(sce))] #Lilrb4a" removed
+
+#Generate and save the heatmap
+plotHeatmap(sce.hm, features=list, exprs_values="logcounts", cellheight=5, cellwidth=0.01, cluster_rows=T, cluster_cols=F, columns=order(sce.hm$cells_cond), colour_columns_by=c("cell_type", "stage"), file=paste0(path, "M1.png"), fontsize=5, show_rownames=T, center=F, symmetric=F)
+```
+

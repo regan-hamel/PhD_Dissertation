@@ -1,0 +1,53 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+sce <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/sce.RDS")
+```
+
+```{r}
+cby = "log10sum"
+
+sceU <- sce[,p]#sce[,sce$stage == "Ctrl"]
+plotUMAP(sceU, colour_by = "Apoe")
+
+#plotUMAP(sce, colour_by = "cell_type")
+
+```
+
+```{r}
+```
+
+
+```{r}
+p <- (sce$cell_type == "Microglia" & counts(sce)['Siglech',] >0 & counts(sce)['Ms4a7',] >0)
+p <- (sce$fl == "Infiltrating" )
+
+t <- sce@int_colData@listData[["reducedDims"]]@listData[["UMAP"]][,2] < 2  & sce@int_colData@listData[["reducedDims"]]@listData[["UMAP"]][,1] < -5
+```
+
+```{r}
+```
+
+```{r}
+saveRDS(sce, "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/sce.RDS")
+```
+
+```{r}
+markers <- findMarkers(sceC, 
+                       group=sceC$Cluster, 
+                       direction="up", #look at only upregulated genes
+                       assay.type="logcounts", #use the non-batch corrected gene expression values
+                       block = sceC$batch, #block any batch effects
+                       full.stats = F,
+                       pval.type="some"
+)
+
+marker.set <- markers[[14]]
+GO_FDR <- marker.set[marker.set$FDR < 0.0001,] # extract significantly differentially expressed markers 
+maxFC <- rowMax(as.matrix(GO_FDR[,4:18])) # find the max FC between the cluster of interest and all other clusters
+rownames(GO_FDR[maxFC > log2(2),])
+```
+
