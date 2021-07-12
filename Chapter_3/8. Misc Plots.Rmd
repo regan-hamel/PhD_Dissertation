@@ -9,7 +9,7 @@ Area composition plot, cell type vs timepoint
 
 Load the sce & set the directory
 ```{r}
-sce <- sce_comp <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/4. Cellassign/sce.RDS")
+sce <- sce_comp <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 4/scRNAseq/4. BC/BC by strain plus Jan/sce_postBC.RDS")
 
 
 #reorder the cell types for aesthetics 
@@ -103,9 +103,9 @@ ggsave(paste0(dirP, "/barplot_celltype_clust.png"), height=5, width=6)
 
 ```{r}
 library(scater)
-cby <- "stage"
-plotUMAP(sce, colour_by=cby)
-ggsave(filename = paste0(cby, ".png"), path = dirP, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
+cby <- "sampleID"
+plotUMAP(sce[,sce$sampleID == "SIGAG5" | sce$sampleID == "SIGAF5.D21" ], colour_by=cby, shape_by="strain")
+ggsave(filename = paste0(cby, " H5_F5.png"), path = dirP, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
 
 ```
 #Correlation of clusters bt stages
@@ -199,3 +199,77 @@ plotHeatmap(sce_hm, features=input, exprs_values="logcounts",
             colour_columns_by=c("cell_type","Cluster"), columns=order(sce_hm$cell_type), main= paste(name), fontsize_row=5, fontsize_col=0.2, treeheight_col=40, file=paste0(dirP, name, ".png"))  #cellheight=4, cellwidth=0.03,
 ```
 
+
+# Heatmaps of non-myeloid cell genes
+Load and prep the sce
+```{r}
+library(scater)
+sce.hm <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 4/scRNAseq/4. BC/BC by strain plus Jan/sce_postBC.RDS")
+dirH <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 4/scRNAseq/Misc Plots/"
+
+# add an X to the end of the second instance of each duplicated barcode to give it a unique name (the heatmap code requires unique barcodes)
+names <- make.unique(colnames(sce.hm), sep="X")
+
+# rename the barcodes in the sce object of duplicated cell names
+colnames(sce.hm) <- names
+```
+
+Prep the cell type-specific gene lists
+```{r}
+# load the gene lists for cell types collected from other scRNA-seq studies (see script for source articles)
+source("//Users/reganhamel/Documents/PhD/scRNAseq Workflow/PhD_Dissertation/Chapter_4/Sources/Non-M RNA.R")
+
+#load the function to prep the gene lists
+source("/Users/reganhamel/Documents/PhD/scRNAseq Workflow/PhD_Dissertation/Chapter_4/Sources/Fxn - Prep Genes.R")
+
+# select the cell types to search for
+cells <- c(Peri, Ep,Neu, Ast, Olig, MG, MC, NP, DC)
+n <- c("Peri", "Ep", "Neu", "Ast", "Olig", "MG", "MC", "NP", "DC")
+x <- 0
+for (i in cells) {
+  x <- x+1
+  genes <- i
+  input <- prepG(genes, sep = " ")
+  assign(n[x], input)
+}
+
+# label the rows by cell type that the gene sets represent
+rows <- data.frame(Genes=c(MG, MC, DC, NP,  Neu, Ast, Olig, Peri, Ep), 
+                   Cell_Type=c(rep("Microglia", length(MG)),  rep("Monocyte/Monocyte-Derived", length(MC)),  rep("Dendritic Cells", length(DC)),rep("Neutrophils", length(NP)), rep("Neurons", length(Neu)), rep("Astrocytes", length(Ast)), rep("Oligodendrocytes_OPCs", length(Olig)),  rep("Pericytes", length(Peri)), rep("Ependymal_Cells", length(Ep))))
+
+# remove duplicated genes
+rows <- rows[!duplicated(rows$Genes),] 
+rownames(rows) <- as.matrix(rows$Genes)
+
+# remove genes not in the sce
+rows <- rows[(rows$Genes %in% rownames(sce.hm)),]
+```
+
+Reorder and label the cell types
+```{r}
+library(plyr)
+library(RColorBrewer)
+
+# add empty factors to the cell_types 
+sce.hm$cell_type <- factor(sce.hm$cell_type, levels=c("Microglia", "MCd", "DC", "NP", "Neurons", "Astrocytes", "Oligodendrocytes_OPCs", "Pericytes", "Ependymal_Cells"))
+
+# add the full names of the cell types
+sce.hm$cell_type <- revalue(sce.hm$cell_type, c("MG" ="Microglia", "MCd"="Monocyte/Monocyte-Derived", "DC"="Dendritic Cells", "NP"="Neutrophils"))
+```
+
+#run less data
+```{r}
+#sce.all <- sce
+
+splitpro<- 0.3 ## 60/40 split
+tr <- sample(ncol(sce.hm), round(ncol(sce.hm) * splitpro))
+sce.hm. <- sce.hm[,tr ]
+```
+
+Generate and save the heatmap
+```{r}
+sce.hm <- sce.hm.
+plotHeatmap(sce.hm, features=rows$Genes, exprs_values="logcounts", cellheight=.75, cellwidth=0.01, cluster_cols=F, cluster_rows=F, columns=order(sce.hm$cell_type), colour_columns_by="cell_type", file=paste0(dirH, "Extended Data Fig.1 CNS Cells.png"), fontsize=7, annotation_row=rows, show_rownames=F, center=F, symmetric=F, scale="column")
+
+#save as png and as pdf
+```
