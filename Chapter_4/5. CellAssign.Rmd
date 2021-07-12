@@ -203,6 +203,14 @@ table(sce[,CAMs]$cell_type)
 sce$cell_type[CAMs] <- "CAMs"
 ```
 
+#implement siglich as MG marker
+```{r}
+table(sce$cell_type)
+sig <- counts(sce)["Siglech",] > 0
+sce$cell_type[sig] <- "Microglia"
+```
+
+
 #remove the na.s
 ```{r}
 #check for NAs
