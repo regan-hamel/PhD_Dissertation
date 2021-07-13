@@ -37,56 +37,6 @@ ggsave(paste0(path,"/Fig 2a - MG markers-legend.png"), width = 8, height = 20)
 ```
 
 
-#Fig 2/sup fig box plots
-
-Set the gene lists of interest
-```{r}
-MG <- c("P2ry12","Plxdc2", "Siglech", "Sparc","Serpine2")
-names(MG) <- "MG"
-
-MG_MCd <- c("Tmem119", "Gpr34", "Olfml3")
-names(MG_MCd) <- "MG_MCd"
-
-Myel <- c("Aif1", "Hexb", "Fcrls","C1qa", "Trem2")
-names(Myel) <- "Myel"
-
-YFP <- c("S100a11", "Ms4a7", "Chil3", "Mgst1", "Ccl7", "Arg1")
-names(YFP) <- "Infiltrating"
-```
-
-Generate the boxplots for the genes of interest (Welch t-Test)
-```{r}
-library(ggplot2)
-library(RColorBrewer)
-library(ggpubr)
-# set the genes of interest
-genes <- list
-x <- sce$stage
-col <- droplevels(factor(sce$cell_type))
-
-for (i in genes) {
-  
-  logs <- as.numeric(logcounts(sce[i]))
-  df <- data.frame(Logs=logs, x=x, colour=col)
-  
-
-  #add empty slots for Ctrl to keep the spacing
-  df.a <- data.frame(Logs=c(0,0,0, 0, 0), x=c("Ctrl", "Ctrl", "Ctrl", "10", "21"), colour=c("Monocyte", "Dendritic_Cells", "Neutrophil", "Neutrophil", "Neutrophil"))
-  df <- rbind(df, df.a)
-  comparisons = list(c("Ctrl", "1"), c("Ctrl", "2"), c("Ctrl", "3"), c("Ctrl", "10"), c("Ctrl", "21"))
-  
-  # if (names(genes) == "MG" | names(genes) == "MG_MCd") {
-  #   sym <- list(cutpoints = c(0, 0.0001, 0.001, 0.01, 0.05, 1), symbols = c("****", "***", "**", "*", "ns"))
-  #   statP <- stat_compare_means(method = "t.test", comparisons = comparisons, symnum.args = sym)
-  # } else { 
-  #   statP <- NULL
-  # }
-  ggplot(data=df, aes(y=Logs, x=x, fill=colour)) + geom_boxplot() + ggtitle(i) + theme(plot.title=element_text(hjust=0.5), legend.position="none") + ylab("logcounts") + xlab("dpi") + scale_fill_brewer(palette="Accent", direction=1) #+ statP
-  
-  ggsave(paste0(path,"boxplots/", i, ".png"), scale=1, height=5, width =5)
-}
-```
-
 
 ## Heatmap
 ```{r}
@@ -187,13 +137,13 @@ sce.hm <- sce
 names <- make.unique(colnames(sce.hm), sep="X")
 colnames(sce.hm) <- names # rename the barcodes in the sce object of duplicated cell names
 
-genesHC <- sort(calculateAverage(sce[,sce$stage == "Ctrl"]), decreasing = T)
+genesCtrl <- sort(calculateAverage(sce[,sce$stage == "Ctrl"]), decreasing = T)
 
 genesSCI <- sort(calculateAverage(sce[,sce$condition == "SCI"]), decreasing = T)
 ```
 
 ```{r}
-list <- unique(names(c(genesHC[1:15], genesSCI[1:15])))
+list <- unique(names(c(genesCtrl[1:15], genesSCI[1:15])))
 
 #Generate and save the heatmap
 plotHeatmap(sce.hm, features=list, exprs_values="logcounts", cellheight=5, cellwidth=0.01, cluster_cols=F, cluster_rows=F, columns=order(sce.hm$cells_cond), colour_columns_by=c("cell_type", "stage"), file=paste0(path, "Top expressed.png"), fontsize=5, show_rownames=T, center=F, symmetric=F)
@@ -256,3 +206,289 @@ list <- list[(list %in% rownames(sce))] #Lilrb4a" removed
 plotHeatmap(sce.hm, features=list, exprs_values="logcounts", cellheight=5, cellwidth=0.01, cluster_rows=T, cluster_cols=F, columns=order(sce.hm$cells_cond), colour_columns_by=c("cell_type", "stage"), file=paste0(path, "M1.png"), fontsize=5, show_rownames=T, center=F, symmetric=F)
 ```
 
+
+#cell cycling
+# Extended Data Fig 5f Heatmap of cell cycling genes
+
+Set the genes for the heatmap
+```{r}
+path <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/1. Comparing w lit/Cycling/"
+colnames(sce) <- make.unique(colnames(sce), sep="X")
+
+#  read in a list of cell cycle markers, from Tirosh et al., 2015
+cc.genes <- readLines(con="/Users/reganhamel/Documents/PhD/scRNAseq Workflow/PhD_Dissertation/Chapter_5/Sources/regev_lab_cell_cycle_genes.txt")
+cc.genes <- stringr::str_to_title(cc.genes)
+
+# s phase vs g2-m phase genes for label reference
+s.genes <- cc.genes[1:43]
+g2m.genes <- cc.genes[44:97]
+
+# load the function for preparing gene lists from source file
+source("/Users/reganhamel/Documents/PhD/scRNAseq Workflow/PhD_Dissertation/Chapter_5/Sources/Fxn - Prep Genes.R")
+
+# format the list of genes gfor the plotHeatmap function
+input <- prepG(cc.genes, sep=",")
+
+# remove any genes not in the sce
+input <- match(input, rownames(sce))
+input <- input[!is.na(input)]
+
+```
+
+Generate the heatmaps for each cell type of interest 
+```{r}
+library(scater)
+
+# set the cell type
+CT <- "Microglia" #"MG"
+sce_hm <- sce[,sce$cell_type == CT]
+ave.counts <- calculateAverage(sce_hm[input,], exprs_values="logcounts")
+to.keep <- ave.counts >= 0.1
+input2 <- input[to.keep]
+
+# plot and save the heatmap
+plotHeatmap(sce_hm, features=input2, exprs_values="logcounts", cluster_cols=F, cluster_rows=T, columns=order(sce_hm$cycl), 
+            zlim=c(0,3), colour_columns_by=c("cycl"), file=paste0(path, "S-G2-M Phase Genes stage", CT, ".png"), fontsize=5, show_rownames=T, center=F, symmetric=F, cellheight=5, cellwidth=0.01)
+
+#plotHeatmap(sce_hm, features=input, exprs_values="logcounts", cellheight=4, cellwidth=0.03,
+# zlim=NULL, center=FALSE, symmetric=FALSE, cluster_cols=FALSE,cluster_rows=F,
+# colour_columns_by=c("stage","Cluster"), columns=order(sce_hm$Cluster), main= paste("S-G2-M Phase Genes"), fontsize_row=5, fontsize_col=0.2, treeheight_col=40, file=paste0(path, "S-G2-M Phase Genes stage", CT, ".png"))  
+```
+
+#mki67 boxplot
+Generate the boxplots for the genes of interest (Welch t-Test)
+```{r}
+library(ggplot2)
+library(RColorBrewer)
+library(ggpubr)
+# set the genes of interest
+i <- "Mki67"
+
+x <- sce$stage
+col <- droplevels(sce$cell_type)
+
+logs <- as.numeric(logcounts(sce[i]))
+df <- data.frame(Logs=logs, x=x, colour=col)
+
+#add empty slots for Ctrl to keep the spacing
+df.a <- data.frame(Logs=c(0,0,0, 0, 0), x=c("Ctrl", "Ctrl", "Ctrl", "10", "21"), colour=c("MCd", "DC", "NP", "NP", "NP"))
+df <- rbind(df, df.a)
+comparisons = list(c("Ctrl", "1"), c("Ctrl", "2"), c("Ctrl", "3"), c("Ctrl", "10"), c("Ctrl", "21"))
+
+ggplot(data=df, aes(y=Logs, x=x, fill=colour)) + geom_boxplot() + ggtitle(i) + theme(plot.title=element_text(hjust=0.5)) + ylab("logounts") + xlab("dpi") + scale_fill_brewer(palette="Accent", direction=1) 
+
+ggsave(paste0(path,"boxplot_", i, ".png"), scale=.75, height=5, width =5)
+```
+
+#looking at cyclins
+D peaks at G1
+E peaks at G1/S
+A is expressed in S/G2
+B peaks at G2/mitosis
+```{r}
+library(scater)
+cyclin.genes <- grep("^Ccn[abde][0-9]$", rowData(sce)$SYMBOL)
+cyclin.genes <- rownames(sce)[cyclin.genes]
+cyclin.genes
+
+plotHeatmap(sce, order_columns_by="Cluster", 
+            cluster_rows=FALSE, features=sort(cyclin.genes))
+```
+
+```{r}
+#use sce with all genes (not just HVGs)
+cyc_sce <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 4/scRNAseq/4. BC/BC by strain plus Jan/sce_UMAP_noBC_H5_C10_filt.RDS")
+
+set.seed(100)
+library(scran)
+mm.pairs <- readRDS(system.file("exdata", "mouse_cycle_markers.rds", 
+                                package="scran"))
+
+# Using Ensembl IDs to match up with the annotation in 'mm.pairs'.
+assignments <- cyclone(cyc_sce, mm.pairs, gene.names=rowData(cyc_sce)$ENSEMBL)
+saveRDS(assignments, paste0(path, "assignments.RDS"))
+```
+
+#plot assignment scores & label sce
+```{r}
+plot(assignments$score$G1, assignments$score$G2M,
+     xlab="G1 score", ylab="G2/M score", pch=16)
+
+cyc_sce$cycl <- assignments$phases
+
+#add labels to sce and save
+sce$cycl <- cyc_sce$cycl[match(colnames(sce), colnames(cyc_sce))]
+sce$cycl[is.na(sce$cycl)] <- "G0"
+saveRDS(sce, "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/sce.RDS")
+```
+cplot
+```{r}
+table(sce$cycl, sce$Cluster)
+
+plotUMAP(sce, colour_by="cycl")
+```
+
+```{r}
+
+sceH <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/2. BC/No Ctrl filtering/sce_UMAP_noBC.RDS")
+sceH <- sceH[,sceH$stage == "HC"  | sceH$stage == "1" | sceH$stage == "2"]
+```
+
+# prepare the gene lists
+```{r}
+library(scater)
+
+colnames(sce) <- make.unique(colnames(sce), sep = "X")
+
+list <- c("Hist1h2bc", "Birc5", "H2afx", "Ube2c", "Ccnb2", "Cenpa", "Stmn1", "Tuba1b", "Pclaf", "Hmgb2", 'Tubb5',"Ran", "Cks1b") #Hammond et al and Milich et al
+
+list[!(list %in% rownames(sce))]
+
+sceH <- sce[, sce$cell_type == "Microglia"]
+#Generate and save the heatmap
+name <- "CtlvAcute short_w_Milich MG2"
+plotHeatmap(sceH, features=list, exprs_values="logcounts", cluster_cols=F, cluster_rows=T, columns=order(sceH$cycl), 
+            zlim=c(0,3), colour_columns_by=c("cycl", "stage"), file=paste0(path, name,".png"), fontsize=5, show_rownames=T, center=F, symmetric=F, cellheight=5, cellwidth=0.01)
+```
+#heatmap of cyclin expression
+
+#looking at cyclins
+D peaks at G1
+E peaks at G1/S
+A is expressed in S/G2
+B peaks at G2/mitosis
+Mki67 G1, S, G2
+```{r}
+library(scater)
+cyclin.genes <- grep("^Ccn[abde][0-9]$", rowData(sce)$SYMBOL)
+cyclin.genes <- rownames(sce)[cyclin.genes]
+cyclin.genes
+
+list <- c("Ccnd1", "Ccnd2", "Ccnd3","Ccne1","Ccne2", "Ccna2",  "Ccnb1",  "Ccnb2","Mki67")
+#sce$cycl <- factor(sce$cycl, levels = c("G0", "G1", "S", "G2M"))
+```
+
+```{r}
+scehm <- sce[,sce$cell_type == "Microglia"]
+scehm$cycl <- droplevels(factor(scehm$cycl))
+
+plotHeatmap(scehm, features=list, exprs_values="logcounts", cellheight=8, cellwidth=0.02,
+            zlim=c(0,2), center=FALSE, symmetric=FALSE, cluster_cols=F,cluster_rows=F,
+            colour_columns_by=c("cycl"), columns=order(scehm$cycl), fontsize_row=5, fontsize_col=0.2, treeheight_col=40, file=paste0(path, "S-G2-M Phase Genes stage MG.png"))  
+
+```
+
+```{r}
+library(scater)
+cby <- "Mki67"
+plotUMAP(sce, colour_by=cby)
+ggsave(filename = paste0(cby, ".png"), path = path, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
+
+```
+
+#pearson's residuals
+- http://www.sthda.com/english/wiki/chi-square-test-of-independence-in-r (how to interpret)
+```{r}
+library(RColorBrewer)
+library(corrplot)
+
+All <- (table(sce$cycl, sce$Cluster)) #repeat for cycl
+
+chisq <- chisq.test(All)
+
+# convert the z-scores (standardized residuals) to chi square values
+chisq.val <- chisq$stdres * chisq$stdres
+
+# convert the chi square values to p values
+chi.p <- pchisq(chisq.val, df=1, lower.tail=FALSE) 
+
+# correct for multiple testing:
+# compare the chi square values to the bonferonni adjusted p value
+bf.p <- (0.05/(nrow(All)*ncol(All)))
+
+chisq$stdres[1,1] <- -40
+chisq$stdres[2,1] <- 45
+ 
+pdf(paste0(path, "cluster stage lim corr.pdf"))
+corrplot(chisq$stdres, p.mat=chi.p, is.cor = F, sig.level = bf.p, tl.col = "black", method="color", cl.length =10, insig = "blank")
+dev.off()
+```
+
+# match stage quant between strains
+```{r}
+table(sce$strain, sce$stage)
+SCE <- sce
+Cre <- sce[,sce$strain == "Cre"]
+Cx <- sce[,sce$strain == "Cx3"]
+
+KEEP <- NULL
+for (i in levels(sce$stage)) {
+  CRE <- Cre[,Cre$stage == i]
+  CX <- Cx[,Cx$stage == i]
+  
+  if (ncol(CRE) > ncol(CX)) {
+    splitpro <- ncol(CX)/ncol(CRE)
+    tr <- sample(ncol(CRE), round(ncol(CRE) * splitpro))
+    keep <- colnames(CRE[,-tr ])
+  } else {
+    splitpro <- ncol(CRE)/ncol(CX)
+    tr <- sample(ncol(CX), round(ncol(CX) * splitpro))
+    keep <- colnames(CX[,-tr ])
+  }
+  
+  KEEP <- c(KEEP, keep)
+}
+
+length(KEEP)
+
+SCE <- SCE[,!(colnames(sce) %in% KEEP)] 
+
+table(SCE$strain, SCE$stage)
+table(SCE$strain, SCE$cell_type)
+
+```
+
+
+Generate the area plot (using sce_comp)
+```{r}
+library(tibble)
+library(ggplot2)
+library(plyr)
+CT <- "Microglia"
+sce_comp <- sce[,sce$cell_type == CT]
+sce_comp$cycl <- factor(sce_comp$cycl, levels=c(rev(levels(sce_comp$cycl))))
+# set HC to 0
+sce_comp$stage <- factor(sce_comp$stage, levels = c("Ctrl","0", "1", "2", "3", "10", "21"))
+sce_comp$stage[sce_comp$stage == "Ctrl"] <- 0
+
+# set the x and y values for the plot
+y <- sce_comp$cycl
+x <- droplevels(factor(sce_comp$stage))
+
+# create the df containing the x and y values
+df <- as.data.frame(table(y, x))
+colnames(df) <- c("y", "x", "Freq")
+
+# create data
+time <- as.numeric(levels(df$x)[df$x]) # x Axis
+value <- as.numeric(df$Freq)             # y Axis
+group <- df$y       # group, one shape per group
+data <- data.frame(time, value, group)
+
+
+# plot
+# Compute percentages with dplyr
+library(dplyr)
+data <- data  %>%
+  group_by(time, group) %>%
+  summarise(n = sum(value)) %>%
+  mutate(percentage = n / sum(n))
+
+# Plot
+# Plot
+ggplot(data, aes(x=time, y=percentage, fill=group)) + 
+  geom_area(alpha=0.7 , size=0.5, colour="black") + ylab("Fraction of Cells") + scale_x_continuous(name ="dpi", breaks=c(0,1,2, 3, 10, 21), labels=c("0"="Ctrl","1"="1","2"="2", "3"="3", "10"="10", "21"="21"))+ scale_fill_brewer(palette="Accent", direction=-1)
+
+
+ggsave(paste0(path, "/Area Plot",CT, ".png"), height=5, width=6)
+```
