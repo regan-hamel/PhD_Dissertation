@@ -10,7 +10,7 @@ output: html_document
 dirA <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 4/scRNAseq/"
 
 # load the sce object
-sce <- readRDS(paste0(dirA, "/QC/preQC_sce.RDS"))
+sce <- readRDS(paste0(dirA, "/1. QC/preQC_sce.RDS"))
 sce$log10sum <- log10(sce$sum)
 sce$log10detected <- log10(sce$detected)
 ```
@@ -49,10 +49,6 @@ p
 #save
 ggsave(paste0(path, y,  "-", c_by, "-pre QC.png"), scale=1.5, height=2.5, width=8)
 ```
-```{r}
-
-```
-
 
 #plotting function
 ```{r}
