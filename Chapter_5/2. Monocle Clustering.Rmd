@@ -1,0 +1,141 @@
+---
+title: "Clustering"
+---
+
+
+Based on:
+https://cole-trapnell-lab.github.io/monocle3/docs/introduction/
+
+In this script we will use Monocle3 to perform Leiden community detection (clustering), trajectory analysis, and explore differentially expressed genes around the trajectory branching points, and between clusters.
+
+# Install the beta version of Monocle3 from GitHub
+```{r eval = F}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install(version = "3.10")
+BiocManager::install('SummarizedExperiment') 
+
+
+BiocManager::install(c('BiocGenerics', 'DelayedArray', 'DelayedMatrixStats',
+                       'limma', 'S4Vectors', 'SingleCellExperiment',
+                       'SummarizedExperiment', 'batchelor', 'Matrix.utils'))
+install.packages("devtools")
+devtools::install_github('cole-trapnell-lab/leidenbase')
+devtools::install_github('cole-trapnell-lab/monocle3')
+```
+
+
+# Load the post-QC sce
+```{r}
+sce <- readRDS("//Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/2. Monocle/sce.RDS")
+
+dirM3 <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/2. Monocle/"
+```
+
+
+# Convert the sce to a CDS object
+```{r}
+library(monocle3)
+
+exp <- logcounts(sce)
+c_data <- colData(sce)
+g_data <- c(rowData(sce),  rownames(sce))
+colnames(g_data) <- c("rotation",'gene_short_name')
+cds <- new_cell_data_set(expression_data = exp, cell_metadata = c_data, gene_metadata = g_data)
+
+#use scater-derived UMAP
+cds@int_colData@listData[["reducedDims"]]@listData[["UMAP"]] <- sce@int_colData@listData[["reducedDims"]]@listData[["UMAP"]]
+
+```
+
+
+# Unsupervised clustering of batch corrected cells using Leiden community detection
+- these are the clusters that we used to explore cell states post-SCI
+```{r}
+
+# calculate clusters
+cds <- cluster_cells(cds, reduction_method = "UMAP", k=14) 
+saveRDS(cds, "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/2. Monocle/cds.RDS")
+
+# add cluster labels to sce
+sce$Cluster <- cds@clusters@listData[["UMAP"]][["clusters"]]
+saveRDS(sce, "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/2. Monocle/sce.RDS")
+
+```
+
+
+# Visualize trajectories and clusters
+- each grey number is a different outcome/cell-fate
+- each black circle is a branch node leading towards the different cell fates
+```{r}
+library(ggplot2)
+
+cby =  "cluster"
+plot_cells(cds,
+          # gene = "P2ry12",
+           color_cells_by = cby,
+           # label_cell_groups=T,
+           graph_label_size=3,
+           group_label_size = 4,
+           label_groups_by_cluster = T,
+           show_trajectory_graph = F
+           #labels_per_group=1
+)
+#save the plot
+ggsave(paste0(dirM3, cby, ".png"), scale = 0.5, width = 10, height = 8)
+```
+
+
+# compare the clustering results
+```{r}
+clust <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 4/scRNAseq/5. Clustering not used/sce.RDS")
+colnames(clust) <- make.unique(colnames(clust), sep = "X")
+clust <- clust[, colnames(sce)]
+```
+
+```{r}
+library(pheatmap)
+tab <- table(leiden=sce2$Cluster, Louvain=clust2$Cluster)
+tab <- tab/rowSums(tab)
+pheatmap(tab, color=viridis::viridis(100), cluster_cols=T, cluster_rows=T, drop_levels = T)
+```
+#comparing to old data from Hamel et al 2020
+```{r}
+clust2 <- readRDS("/Users/reganhamel/Dropbox (Cambridge University)/Lab/Regan/scRNAseq/Cell Ranger 3.1.0/SCI/May 2020/BC/sce_Shiny.RDS")
+colnames(clust2) <- make.unique(colnames(clust2), sep = "X")
+colnames(sce) <- gsub(x=colnames(sce), pattern="-1", replacement = "")
+
+names <- intersect(colnames(sce), colnames(clust2))
+
+sce2 <- sce[,names]
+clust2 <- clust2[,names]
+sce2$Cluster <- droplevels(sce2$Cluster)
+```
+
+#pearson's residuals
+- http://www.sthda.com/english/wiki/chi-square-test-of-independence-in-r (how to interpret)
+```{r}
+library(RColorBrewer)
+library(corrplot)
+
+All <- t(table(factor(sce$Cluster), droplevels(sce$stage))) #repeat for cycl
+
+c <- chisq.test(All)
+
+# convert the z-scores (standardized residuals) to chi square values
+chisq.val <- chisq$stdres * chisq$stdres
+
+# convert the chi square values to p values
+chi.p <- pchisq(chisq.val, df=1, lower.tail=FALSE) 
+
+# correct for multiple testing:
+# compare the chi square values to the bonferonni adjusted p value
+bf.p <- (0.05/(nrow(All)*ncol(All)))
+
+#chisq$stdres[11,1] <- 75
+chisq$stdres[1,11] <- 75
+
+pdf(paste0(dirM3, "table corrplot.pdf"))
+corrplot(chisq$stdres, p.mat=chi.p, is.cor = FALSE, sig.level = bf.p, tl.col = "black", method="color", cl.length =10, insig = "blank")
+dev.off()
+```
