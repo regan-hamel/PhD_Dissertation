@@ -3,17 +3,17 @@ title: "R Notebook"
 ---
 
 ```{r}
-dirH <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/HC DEGs/"
-list <- readLines("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/HC DEGs/HC(D10) vs D1-2/SCI-179 genes.txt")
+dirH <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/2. BC/HC DEGs/"
+#list <- readLines("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/HC DEGs/HC(D10) vs D1-2/SCI-179 genes.txt")
 
-sceH <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/sce_UMAP_noBC.RDS")
+sceH <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/2. BC/No Ctrl filtering/sce_UMAP_noBC.RDS")
 sceH <- sceH[,sceH$stage == "HC"  | sceH$stage == "1" | sceH$stage == "2"]
 colnames(sceH) <- make.unique(colnames(sceH), sep = "X")
 ```
 
 # prepare the gene lists
 ```{r}
-cyclMG <- c("Hist1h2bc", "Birc5", "H2afx", "Ube2c", "Ccnb2", "Cenpa", "Stmn1")
+cyclMG <- c("Hist1h2bc", "Birc5", "H2afx", "Ube2c", "Ccnb2", "Cenpa", "Stmn1", "Tuba1b", "Pclaf", "Hmgb2", 'Tubb5',"Ran", "Cks1b") #barres and Milich et al
 aMG <- c("Ccl2", "Apoe", "Spp1", "Ctsb", "Lgals3", "Ftl1", "Fth1", "Fabp5", "Lyz2", "Mif", "Ms4a6c", "Ccl4")
 hMG <- c("P2ry12", "Tmem119","Plxdc2", "Siglech", "Olfml3", "Sparc")
 CAMS <- c("Mrc1", "Pf4", "Ms4a7", "Stab1", "Cbr2", "Cd36")
@@ -27,9 +27,9 @@ list[!(list %in% rownames(sceH))]
 
 #Generate and save the heatmap
 ```{r}
-name <- "CtlvAcute short"
+name <- "CtlvAcute short_w_Milich"
 library(scater)
-plotHeatmap(sceH, features=list, exprs_values="logcounts", cluster_cols=F, cluster_rows=F, columns=order(sceH$sampleID), colour_columns_by=c("sampleID", "stage"), file=paste0(dirH, name,".png"), fontsize=5, show_rownames=T, center=T, symmetric=F, scale="column", cellheight=5, cellwidth=0.035)
+plotHeatmap(sceH, features=list, exprs_values="logcounts", cluster_cols=F, cluster_rows=F, columns=order(sceH$sampleID), colour_columns_by=c("sampleID", "stage"), file=paste0(dirH, name,".png"), fontsize=5, show_rownames=T, center=T, symmetric=F, scale="column", cellheight=5, cellwidth=0.035) # remove column?
 
 ```
 #boxplot of activated genes by sample to demonstrate that SIGAG11.D2 is activated
