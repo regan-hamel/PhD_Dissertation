@@ -1,0 +1,147 @@
+---
+title: "R Notebook"
+---
+
+```{r}
+dirH <- "//Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 4/scRNAseq/Investigation cycling Ctrl/"
+
+sceHCre <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 4/scRNAseq/4. BC/sce_UMAP_noBC.RDS")
+sceHCre <- sceHCre[,sceHCre$stage == "Ctrl"]#  | sceHCre$stage == "1" | sceHCre$stage == "2"]
+colnames(sceHCre) <- make.unique(colnames(sceHCre), sep = "X")
+
+sceHCx3 <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/2. BC/No Ctrl filtering/sce_UMAP_noBC.RDS")
+sceHCx3 <- sceHCx3[,sceHCx3$stage == "HC" ]# | sceHCx3$stage == "1" | sceHCx3$stage == "2"]
+
+sceHCre
+sceHCx3
+```
+
+#harmonise datasets
+```{r}
+#remove UMAP and logcoounts
+reducedDim(sceHCx3) <- reducedDim(sceHCre) <- NULL
+reducedDim(sceHCx3) <- reducedDim(sceHCre) <- NULL
+
+sceHCx3$subset <- sceHCx3$batch <-  sceHCre$subset <- sceHCre$batch<- NULL
+#remove metadata
+metadata(sceHCx3) <- metadata(sceHCre) <- list()
+
+#harmonise row data
+rowData(sceHCx3)@listData <-   rowData(sceHCre)@listData
+
+#add version to sceHCre
+sceHCre$version <- 3
+sceHCx3$stage <- factor(sceHCx3$stage, levels=c(levels(sceHCx3$stage), "Ctrl"))
+sceHCx3$stage[sceHCx3$stage == "HC"] <- "Ctrl"
+#distinguish between strain and fatemap
+sceHCre$fl <- sceHCre$strain
+sceHCre$strain <- "Cre"
+sceHCx3$fl <- sceHCx3$strain
+
+colData(sceHCre)[26:30] <- NULL
+#check the version - no logcounts, have dbl scores
+sceHCx3
+sceHCre
+
+sceH <- cbind(sceHCx3, sceHCre)
+colnames(sceH) <- make.unique(colnames(sceH), sep = "X")
+
+```
+
+#order samples
+```{r}
+sceH$stage <- factor(droplevels(sceH$stage), levels = c("Ctrl", 1, 2, 3, 10, 21))
+sceH$sampleID <- factor(droplevels(sceH$sampleID), levels = c("SIGAD10", "SIGAG11.D2", 'SIGAA10', 'SIGAH2', 'SIGAF9', 'SIGAG9.D1', 'SIGAH11', "SIGAB11", "SIGAE5","SIGAE11", "SIGAF11","SIGAA1", "SIGAF5"))
+
+t(table(sceH$sampleID, sceH$stage))
+```
+
+# prepare the gene lists
+```{r}
+cyclMG <- c("Hist1h2bc", "Birc5", "H2afx", "Ube2c", "Ccnb2", "Cenpa", "Stmn1")
+aMG <- c("Ccl2", "Apoe", "Spp1", "Ctsb", "Lgals3", "Ftl1", "Fth1", "Fabp5", "Lyz2", "Mif", "Ms4a6c", "Ccl4")
+hMG <- c("P2ry12", "Tmem119","Plxdc2", "Siglech", "Olfml3", "Sparc")
+CAMS <- c("Mrc1", "Pf4", "Ms4a7", "Stab1", "Cbr2", "Cd36")
+
+list <- c(hMG, cyclMG, aMG, CAMS)
+
+list[!(list %in% rownames(sceH))]
+
+```
+
+
+#Generate and save the heatmap
+```{r}
+name <- "Ctl short"
+library(scater)
+plotHeatmap(sceH, features=list, exprs_values="logcounts", cluster_cols=F, cluster_rows=F, columns=order(sceH$sampleID), colour_columns_by=c("sampleID", "stage"), file=paste0(dirH, name,".png"), fontsize=5, show_rownames=T, center=T, symmetric=F, scale="column", cellheight=5, cellwidth=0.035)
+
+```
+#boxplot of activated genes by sample to demonstrate that SIGAG11.D2 is activated
+Generate box plots for DEGs
+```{r}
+sceb <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/sce_UMAP_noBC.RDS")
+```
+
+```{r}
+library(RColorBrewer)
+library(ggplot2)
+library(scran)
+
+dirM <- paste0(dirBC, "boxplots/")
+dir.create(dirM)
+
+genes <-  "Cd36" #c("P2ry12", "Spp1", "Mki67", "Stmn1", "Cfl1", "Birc5")
+# set the clusters
+x <- sceb$sampleID
+
+# generate plots for each gene
+for (i in genes) {
+  
+  # extract the log10-transformed counts for the gene of interest
+  logs <- as.numeric(logcounts(sceb[i]))
+  df <- data.frame(Logs=logs, x=x, cond = sceb$stage)
+  
+  #plot
+  d <- ggplot(data=df, aes(y=Logs, x=x, fill=cond)) + geom_boxplot() + ggtitle(i) + theme(plot.title=element_text(hjust=0.5), axis.text.x=element_text(angle=45, hjust=1)) + ylab("logcounts") + scale_fill_manual(values=c("lightblue", brewer.pal(11,"RdYlGn"),"#003319","black", "grey50", "grey50"))  + xlab("Cluster") 
+  
+  # save and size
+  ggsave(paste0(dirM, i, ".png"), scale=1, height=3, width=4)
+}
+
+d
+```
+
+#investigate UMAPs
+```{r}
+sce <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 4/scRNAseq/4. BC/With H5_C10/BC by strain plus Jan/With Cycling Cx Ctrl/sce_UMAP_noBC.RDS")
+```
+
+```{r}
+filtered <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/2. BC/sce_UMAP_noBC_Ctrl_filt.RDS")
+
+#get colnames
+sce$rem <- (colnames(sce) %in% colnames(filtered))
+```
+
+```{r}
+library(scater)
+
+#SCE <- sce[,sce@int_colData@listData[["reducedDims"]]@listData[["UMAP"]][,1] > -1 & sce@int_colData@listData[["reducedDims"]]@listData[["UMAP"]][,2] < -6 & sce@int_colData@listData[["reducedDims"]]@listData[["UMAP"]][,1] < 6 & sce$stage == "Ctrl"]
+
+SCE <- sce[,sce@int_colData@listData[["reducedDims"]]@listData[["UMAP"]][,1] > -7 & sce@int_colData@listData[["reducedDims"]]@listData[["UMAP"]][,2] >1 & sce@int_colData@listData[["reducedDims"]]@listData[["UMAP"]][,1] < 5 & sce$stage == "Ctrl"]
+
+cby <- "sampleID"
+
+plotUMAP(SCE, colour_by=cby)
+
+SCE$grey <- SCE$rem 
+SCE$grey[SCE$sampleID  != "SIGAG11.D2" ] <- NA
+plotUMAP(SCE, colour_by="grey") + scale_fill_manual(values = c("#D53E4F", "#542788", "#5AB4AC", "#A1D76A", "#F1A340", "#FFEDA0"), aesthetics = "fill", na.value = "grey90") + theme(plot.title = element_text(size = rel(2)))
+
+#plot
+ggsave("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 4/scRNAseq/4. BC/With H5_C10/BC by strain plus Jan/With Cycling Cx Ctrl/Ctrl G11 discard.png")
+```
+
+
+
