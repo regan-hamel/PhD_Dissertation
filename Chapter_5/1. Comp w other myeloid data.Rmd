@@ -256,7 +256,7 @@ plotHeatmap(sce_hm, features=input2, exprs_values="logcounts", cluster_cols=F, c
 ```
 
 #mki67 boxplot
-Generate the boxplots for the genes of interest (Welch t-Test)
+Generate the boxplots for the genes of interest 
 ```{r}
 library(ggplot2)
 library(RColorBrewer)
