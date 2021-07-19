@@ -58,7 +58,7 @@ cds <- cluster_cells(cds, reduction_method = "UMAP", k=14)
 saveRDS(cds, "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/2. Monocle/cds.RDS")
 
 # add cluster labels to sce
-sce$Cluster <- cds@clusters@listData[["UMAP"]][["clusters"]]
+sce$Cluster_OG <- colData(cds)$clusters_OG <- cds@clusters@listData[["UMAP"]][["clusters"]]
 saveRDS(sce, "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/2. Monocle/sce.RDS")
 
 ```
@@ -139,3 +139,12 @@ pdf(paste0(dirM3, "table corrplot.pdf"))
 corrplot(chisq$stdres, p.mat=chi.p, is.cor = FALSE, sig.level = bf.p, tl.col = "black", method="color", cl.length =10, insig = "blank")
 dev.off()
 ```
+
+# remove/ignore smallest clusters for down stream analysis
+```{r}
+sce <- sce[,sce$Cluster_OG != 21 &  sce$Cluster_OG != 22 &  sce$Cluster_OG != 20]
+saveRDS(sce, "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/3. Small Clust Removed/sce.RDS")
+cds <- cds[,colData(cds)$clusters_OG != 21 &  colData(cds)$clusters_OG != 22 &  colData(cds)$clusters_OG != 20]
+saveRDS(cds, "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/3. Small Clust Removed/cds.RDS")
+```
+
