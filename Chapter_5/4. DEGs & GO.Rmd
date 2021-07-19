@@ -1,0 +1,90 @@
+---
+title: "DEGs"
+---
+
+```{r}
+dirM <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/4. MG4 removed/"
+
+sce <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/4. MG4 removed/sce.RDS")
+```
+
+```{r}
+library(scran)
+
+level <- factor(sce$Cluster)
+pval.type <- "all"
+
+#num_markers <- 200
+
+# Make pairwise comparisons between genes to identify the most DEGs between clusters, which may serve as markers
+markers <- findMarkers(sce, 
+                       group=level, 
+                       direction="up", #look at only upregulated genes
+                       assay.type="logcounts", #use the non-batch corrected gene expression values
+                       full.stats = F,
+                       pval.type = pval.type
+)
+
+# Save the markers
+saveRDS (markers, file = paste0(dirM, "Cluster_markers_", pval.type,".RDS"))
+```
+
+# Save text files of markers for each cluster for GO
+```{r}
+for (i in 1:nlevels(level)){ #repeat for the number of clusters in the sce object
+  marker.set <- markers[[i]] # isolate a single cluster 
+  GO_FDR <- marker.set[marker.set$FDR < 0.0001,]# extract significantly differentially expressed markers 
+  maxFC <- rowMax(as.matrix(GO_FDR[,4:length(GO_FDR)])) # find the max FC between the cluster of interest and all other clusters
+  GO_FC <- GO_FDR[maxFC > log2(1.25),] # extract only the genes with a FC > 2 between at least 1 other cluster (FC from findMarkers is given in log2)
+  name <- gsub("\\(", "",levels(level)[i])
+  name <- gsub("\\)", "",name)
+  write.table(rownames(GO_FC), file=paste0(dirM, name," genes.txt"), sep="\t", quote=FALSE, col.names=FALSE, row.names = FALSE) # write just the genes (to upload to PANTHER GO)
+  #write.csv(GO_FC, file=paste0(dirM, levels(level)[i], "-", nrow(GO_FC)," stats.csv"), quote=FALSE, col.names=FALSE, row.names = T) # write the gene lists with statistics
+}
+```
+
+```{r}
+#write a list of all genes 
+all <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/preQC_sce copy.RDS")
+markers <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/3. Small Clust Removed/DEGs (some)/0.0001 & 1.25/Cluster_markers_some.RDS")
+write.table(rownames(all), file=paste0(dirM, "All genes.txt"), sep="\t", quote=FALSE, col.names=FALSE, row.names = FALSE) # write just the genes (to upload to PANTHER GO)
+```
+
+
+#heatmap for the top DEGs
+
+#get top 5 DEGs per cluster
+```{r}
+GENES <- NULL
+for (i in 1:nlevels(level)){ #repeat for the number of clusters in the sce object
+  marker.set <- markers[[i]] # isolate a single cluster 
+  genes <- rownames(marker.set)[1:3]
+  GENES <- c(GENES, genes)
+}
+
+input <- unique(GENES)
+```
+
+# calculate average for each cluster
+```{r}
+AVE <- NULL
+for (i in 1:nlevels(level)){ #repeat for the number of clusters in the sce object
+  ave <- calculateAverage(sce[input,sce$Cluster == levels(level)[i]], exprs_values = "logcounts")
+  AVE <- cbind(AVE, ave)
+}
+colnames(AVE) <- levels(level)
+rownames(AVE) <- input
+```
+
+
+```{r}
+library(pheatmap)
+
+#scale down:
+t <- which(AVE > 8)
+AVE[t] <- 8
+
+pheatmap(AVE, color=viridis::viridis(500), cluster_cols=F, cluster_rows=F, drop_levels = T, fontsize = 7, border_color = NA, file = paste0(dirM, "DEGs.png"))
+```
+
+

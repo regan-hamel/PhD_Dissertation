@@ -1,0 +1,201 @@
+---
+title: "8. Misc Plots"
+author: "Regan"
+date: "30/06/2021"
+---
+
+Area composition plot, cell type vs timepoint
+
+
+Load the sce & set the directory
+```{r}
+sce <- sce_comp <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 4/scRNAseq/3. CellAssign/sce.RDS")
+
+
+#reorder the cell types for aesthetics 
+sce_comp$cell_type <- sce$cell_type <- factor(sce_comp$cell_type, levels=c("CAMs","TCell","Monocyte","Neutrophil","Dendritic_Cells","Macrophage","Microglia"))
+
+dirP <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 4/scRNAseq/Misc Plots/"
+```
+
+Generate the area plot (using sce_comp)
+```{r}
+library(tibble)
+library(ggplot2)
+library(plyr)
+
+
+# set HC to 0
+sce_comp$stage <- factor(sce_comp$stage, levels = c("Ctrl","0", "1", "2", "3", "10", "21"))
+sce_comp$stage[sce_comp$stage == "Ctrl"] <- 0
+
+# set the x and y values for the plot
+y <- sce_comp$cell_type
+x <- droplevels(factor(sce_comp$stage))
+
+# create the df containing the x and y values
+df <- as.data.frame(table(y, x))
+colnames(df) <- c("y", "x", "Freq")
+
+# create data
+time <- as.numeric(levels(df$x)[df$x]) # x Axis
+value <- as.numeric(df$Freq)             # y Axis
+group <- df$y       # group, one shape per group
+data <- data.frame(time, value, group)
+
+
+# plot
+# Compute percentages with dplyr
+library(dplyr)
+data <- data  %>%
+  group_by(time, group) %>%
+  summarise(n = sum(value)) %>%
+  mutate(percentage = n / sum(n))
+
+# Plot
+# Plot
+ggplot(data, aes(x=time, y=percentage, fill=group)) + 
+  geom_area(alpha=0.7 , size=0.5, colour="black") + ylab("Fraction of Cells") + scale_x_continuous(name ="Day Post-SCI", breaks=c(0,1,2, 3, 10, 21), labels=c("0"="Ctrl","1"="1","2"="2", "3"="3", "10"="10", "21"="21"))+ scale_fill_brewer(palette="Accent", direction=-1)
+
+
+ggsave(paste0(dirP, "/Composition Area Plot cluster.png"), height=5, width=6)
+```
+
+#histogram of cell type per cluster
+```{r}
+library(ggplot2)
+library(dplyr)
+
+
+# set the x and y values for the plot
+y <- sce$cell_type
+x <- droplevels(factor(sce$Cluster))
+
+# create the df containing the x and y values
+df <- as.data.frame(table(y, x))
+colnames(df) <- c("y", "x", "Freq")
+
+# create data
+cluster <- as.numeric(levels(df$x)[df$x]) # x Axis
+value <- as.numeric(df$Freq)             # y Axis
+group <- df$y       # group, one shape per group
+data <- data.frame(cluster, value, group)
+
+
+# plot
+# Compute percentages with dplyr
+data <- data  %>%
+  group_by(cluster, group) %>%
+  summarise(n = sum(value)) %>%
+  mutate(percentage = n / sum(n))
+x
+
+# Small multiple
+ggplot(data, aes(fill=group, y=value, x=cluster)) + 
+  geom_bar(position="stack", stat="identity") +
+  ylab("Number of Cells") + xlab("Cluster")  + 
+  scale_x_discrete(limits=c(1:11)) +
+  scale_fill_brewer(palette="Accent", direction=-1) 
+
+ggsave(paste0(dirP, "/barplot_celltype_clust.png"), height=5, width=6)
+
+```
+
+```{r}
+library(scater)
+cby <- "stage"
+plotUMAP(sce, colour_by=cby)
+ggsave(filename = paste0(cby, ".png"), path = dirP, scale = 1, width = 8, height = 8,  dpi = 300, limitsize = TRUE)
+
+```
+#Correlation of clusters bt stages
+
+
+#pearson's residuals
+- http://www.sthda.com/english/wiki/chi-square-test-of-independence-in-r (how to interpret)
+```{r}
+library(RColorBrewer)
+library(corrplot)
+
+All <- table(sce$Cluster, sce$stage)
+
+chisq <- chisq.test(All)
+
+# convert the z-scores (standardized residuals) to chi square values
+chisq.val <- chisq$stdres * chisq$stdres
+
+# convert the chi square values to p values
+chi.p <- pchisq(chisq.val, df=1, lower.tail=FALSE) 
+
+# correct for multiple testing:
+# compare the chi square values to the bonferonni adjusted p value
+bf.p <- (0.05/(nrow(All)*ncol(All)))
+
+pdf(paste0(dirP, "corrplot.pdf"))
+corrplot(chisq$stdres, p.mat=chi.p, is.cor = FALSE, sig.level = bf.p, tl.col = "black", method="color", cl.length =10, insig = "blank")
+dev.off()
+```
+
+Generate box plots for DEGs
+```{r}
+library(RColorBrewer)
+library(ggplot2)
+library(scran)
+
+genes <-  "Ngp" #c("Ftl1", "Fth1", "Cd52", "Ctsb", "Timp2", "Mif", "Anxa5")
+# set the clusters
+x <- sce$cell_type
+
+# generate plots for each gene
+for (i in genes) {
+  
+  # extract the log10-transformed counts for the gene of interest
+  logs <- as.numeric(logcounts(sce[i]))
+  df <- data.frame(Logs=logs, x=x, cond = sce$cell_type)
+  
+  #plot
+  d <- ggplot(data=df, aes(y=Logs, x=x, fill=cond)) + geom_boxplot() + ggtitle(i) + theme(plot.title=element_text(hjust=0.5), axis.text.x=element_text(angle=45, hjust=1)) + ylab("log10 UMI Counts") + scale_fill_manual(values=c("lightblue", brewer.pal(11,"RdYlGn"),"#003319","black", "grey50", "grey50"))  + xlab("Cluster") 
+  
+  # save and size
+ # ggsave(paste0(dirM,"byClust -", i, ".png"), scale=1, height=3, width=4)
+}
+
+d
+```
+
+#heatmaps
+#from txt
+```{r}
+
+# input <- c("S100a9", "S100a8", "Retnlg", "Ifitm1", "Irg1", "Hdc", "Cxcr2", "Mxd1")
+# name <- "granulocytes"
+
+input0 <- c('Cd79a',  'Igll1',  'Vpreb3',  'Vpreb1',  'Lef1')
+  #c("Ttr", "Igkc", "Ebpp2", "Ighg2c", "Ccl5",  "Ms4a4b", "Thy1", "Icos", "Trbc1", 'Trbc2', "Gzma", "Ccl5", "Prss34", "Ly6c2", "Vim", "Mpo")
+name <- "lymphocytes"
+
+input <- match(input0, rownames(sce))
+discard <- which(is.na(input))
+keep <- which(!is.na(input))
+
+input0[discard]
+```
+
+Generate the heatmaps for each cell type of interest 
+```{r}
+library(scater)
+
+# set the cell type
+
+sce_hm <- sce
+
+#rename the barcodes in the sce object of duplicated cell names
+colnames(sce_hm) <- make.unique(colnames(sce), sep = "X")
+
+
+# plot and save the heatmap
+plotHeatmap(sce_hm, features=input, exprs_values="logcounts", 
+            zlim=NULL, center=FALSE, symmetric=FALSE, cluster_cols=FALSE,cluster_rows=T,
+            colour_columns_by=c("cell_type","Cluster"), columns=order(sce_hm$cell_type), main= paste(name), fontsize_row=5, fontsize_col=0.2, treeheight_col=40, file=paste0(dirP, name, ".png"))  #cellheight=4, cellwidth=0.03,
+```
+

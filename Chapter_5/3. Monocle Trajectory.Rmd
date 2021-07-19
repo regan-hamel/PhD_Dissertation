@@ -1,0 +1,284 @@
+---
+title: "Monocole 3"
+author: "Regan"
+date: "12/05/2020"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Based on:
+https://cole-trapnell-lab.github.io/monocle3/docs/introduction/
+
+In this script we will use Monocle3 to perform Leiden community detection (clustering), trajectory analysis, and explore differentially expressed genes around the trajectory branching points, and between clusters.
+
+# Load the latest sce
+```{r}
+sce <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/4. MG4 removed/sce.RDS")
+colnames(sce) <- make.unique(colnames(sce), sep = "X")
+
+dirM3 <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/2. Monocle/"
+```
+
+
+# load cds
+```{r}
+library(monocle3)
+
+cds <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/4. MG4 removed/cds.RDS")
+```
+
+
+# Perform trajectory analysis on the cells by learning the principle graph
+- each cell is a point in the high dimensional space
+- learning the trajectory of cells in this space allows us to hypothesize the cells' transition through the observed transcriptional profiles
+```{r}
+cds <- learn_graph(cds, use_partition = T, close_loop = F)
+```
+
+# Visualize trajectories and clusters
+- each grey number is a different outcome/cell-fate
+- each black circle is a branch node leading towards the different cell fates
+```{r}
+library(ggplot2)
+
+#temporal colour scheme
+temp <- c("#D53E4F", "#FF8D59","#E6F598","#1A9850","#3288BD", "#542788")
+
+
+cby =  "cluster"
+plot_cells(cds,
+           gene = "Mki67",
+           color_cells_by = cby,
+           label_cell_groups=T,
+           label_leaves=F,
+           label_roots = F,
+           label_branch_points=F,
+           graph_label_size=3,
+           group_label_size = 4,
+           label_groups_by_cluster = T,
+           show_trajectory_graph = T,
+           alpha = 0.5,
+           #  cell_size = 
+           labels_per_group=1
+)#+ scale_fill_manual(values=temp) + geom_point(aes(fill=colData(cds[0])[cby][,1]), pch=21, stroke = .0, alpha = 1, size=0.5) 
+#save the plot
+ggsave(paste0(dirM3, cby, ".png"), scale = 0.5, width = 10, height = 8)
+```
+
+#order cells
+```{r}
+cds <- order_cells(cds)
+saveRDS(cds, "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/2. Monocle/cds.RDS")
+```
+
+#plot 
+```{r}
+cby = "pseudotime"
+plot_cells(cds,
+           color_cells_by = cby,
+           label_cell_groups=F,
+           label_leaves=F,
+           label_roots = F,
+           label_branch_points=F,
+           graph_label_size=0,
+           group_label_size = 0,
+           label_groups_by_cluster = F,
+           show_trajectory_graph = T,
+           trajectory_graph_color = "grey60")
+
+ggsave(paste0(dirM3, cby,".png"), scale = 0.5, width = 10, height = 8)
+```
+
+# rename clusters based on cell type and trajectory
+```{r}
+sce$Cluster_OG <- droplevels(sce$Cluster_OG)
+colData(cds)$clusters_OG <- cds@clusters@listData[["UMAP"]][["clusters"]]
+```
+
+```{r}
+list <- list(
+  "11"="Ctrl",
+  "1"="MG(1)",
+  "8"="MG(2)",
+  "4"="MG(3)",
+  "10"="MG(3A)",
+  "6"="MG(3B)",
+  "15"="MG(4)",
+  "12"="MC(1)",
+  "3"="MC(2A)",
+  "2"="MC(3A)",
+  "7"="MC(2B)",
+  "18"="MC(3B)",
+  "16"="MC(2C)",
+  "14"="MC(4A)",
+  "13"="DC(1)",
+  "5"="DC(2)",
+  "19"="DC(3)",
+  "9"="NP",
+  "17"="TCell"
+)
+
+
+sce$Cluster <- factor(sce$Cluster_OG, levels =c(levels(sce$Cluster_OG), unlist(list)))
+for (i in names(list)) {
+  CT <- list[[i]]
+  
+  sce$Cluster[sce$Cluster_OG == i] <- CT
+  
+}
+#sanity check
+
+sce$Cluster <- colData(cds)$clusters <- cds@clusters@listData[["UMAP"]][["clusters"]] <-  droplevels(sce$Cluster)
+table(sce$Cluster, sce$Cluster_OG)
+```
+
+
+```{r}
+cby =  "cluster"
+plot_cells(cds,
+          # gene = "Fabp5",
+           color_cells_by = cby,
+           label_cell_groups=T,
+           label_leaves=F,
+           label_roots = F,
+           label_branch_points=F,
+           graph_label_size=3,
+           group_label_size = 3,
+           label_groups_by_cluster = T,
+           show_trajectory_graph = T,
+           alpha = 0.5,
+           #  cell_size = 
+           labels_per_group=1
+)#+ scale_fill_manual(values=temp) + geom_point(aes(fill=colData(cds[0])[cby][,1]), pch=21, stroke = .0, alpha = 1, size=0.5) 
+#save the plot
+#ggsave(paste0(dirM3, cby, " new names.png"), scale = 0.5, width = 10, height = 8)
+```
+
+```{r}
+saveRDS(sce, "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/3. Small Clust Removed/sce.RDS")
+saveRDS(cds, "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/3. Small Clust Removed/cds.RDS")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### KEEP?###
+
+
+#### need to run preprocess if wnat to to below ( still replace UMAPs coords for the above) #####
+
+# Explore the gene expression patterns around the branch points
+- manually select the cells in the areas of interest
+```{r}
+cds_subset <- choose_cells(cds)
+cds_subset <- choose_graph_segments(cds)
+
+```
+
+# Find differentially expressed genes at the points of interest
+- using the Moran's I test
+```{r}
+subset_pr_test_res <- graph_test(cds_subset, neighbor_graph="principal_graph", cores=4)
+pr_deg_ids <- row.names(subset(subset_pr_test_res, q_value < 0.001)) 
+```
+
+# Generate the gene modules based on the graph test results
+- Gene modules are clusters of co-expressed genes
+```{r}
+gene_module_df <- find_gene_modules(cds_subset[pr_deg_ids,], resolution=0.001)
+```
+
+
+# Compare modules scores by cluster (or other colData)
+```{r}
+cell_group_df <- tibble::tibble(cell=row.names(colData(cds)), 
+                                cell_group=colData(cds)$clusters)
+agg_mat <- aggregate_gene_expression(cds, gene_module_df, cell_group_df)
+row.names(agg_mat) <- stringr::str_c("Module ", row.names(agg_mat))
+pheatmap::pheatmap(agg_mat,
+                   scale="column", clustering_method="ward.D2")
+```
+
+# Visualize the subset of cells under investigation via UMAP
+```{r}
+agg_mat <- aggregate_gene_expression(cds_subset, gene_module_df)
+module_dendro <- hclust(dist(agg_mat))
+gene_module_df$module <- factor(gene_module_df$module, 
+                                levels = row.names(agg_mat)[module_dendro$order])
+
+plot_cells(cds,
+           genes=gene_module_df,
+           label_cell_groups=FALSE,
+           show_trajectory_graph=F,
+           cell_size=1)
+```
+
+# Take a look at the genes at the top of modules of interest
+```{r}
+gene_module_df[gene_module_df$module == 1,]
+```
+
+
+
+
+
+
+#### OPTION TO PREPROCESS USING MONOCLE 3
+
+
+# Preprocess the cds OR copy old data
+- this normalizes the data and calculates a lower dimensional space
+```{r}
+cds <- preprocess_cds(cds, num_dim = 50, alignment_group="batch")
+
+#make sure you're using enough pc to capture the variance
+plot_pc_variance_explained(cds)
+```
+
+# Batch correction by matching mutual nearest neighbours (as in 5. BC and QC Clusters) 
+```{r}
+cds <- batchelor::reducedMNN(cds,
+                             batch=cds@colData@listData[["ver_strain"]],
+                             #subset.row=rownames(sce[chosen_hvgs,]),
+                             k=20,#number of nearest neighbours considered - higher = greater merging
+                             d=50,#number of pcs used 
+                             merge.order = c(2, 3, 1), #c(4, 7, 1, 5, 10, 9, 8, 2, 3, 11, 6), #merge with most diverse sample first
+                             #auto.merge=T, #the order of merging is important. Set to auto or order by most heterogeneity, if known
+                             BSPARAM = BiocSingular::RandomParam(deferred=TRUE), #set parallelization
+                             correct.all=F #set correct.all=T otherwise it only corrects chosen.hvg values
+)
+
+cds <- align_cds(cds, 
+                 alignment_group = "ver_strain", 
+                 merge.order = c(2, 3, 1),
+                 k=20,#number of nearest neighbours considered - higher = greater merging
+                 d=50,
+                 BSPARAM = BiocSingular::RandomParam(deferred=TRUE), #set parallelization
+                 correct.all=F
+                 #set correct.all=T otherwise it only corrects chosen.hvg values
+) #separate batches by flow cell lane, as in 5.
+
+#reducedMNN(cds, batch = "ver_strain") #separate batches by flow cell lane, as in 5.
+```
+
+# Compute a projection of the batch corrected dataset into the lower dimensional space
+```{r}
+set.seed(100)
+cds <- reduce_dimension(cds, umap.min_dist = 0.1, umap.n_neighbors = 15, umap.metric = "cosine",  preprocess_method = 'Aligned')
+
+runUMAP(cds, dimred="corrected", metric="cosine", min_dist=0.1)
+
+#save UMAP dimensions in the sce object, for visualization purposes
+```
