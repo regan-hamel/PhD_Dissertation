@@ -1,0 +1,463 @@
+---
+title: "Characterising Clusters"
+---
+
+#load directory and sce
+```{r}
+dirM <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/4. MG(4) removed/MG/"
+
+sce <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/4. MG4 removed/sce.RDS")
+```
+
+#stacked bar chart with percentages and quantities of cell type per cluster
+```{r}
+library(ggplot2)
+library(dplyr)
+temp <- rev(c("#D53E4F", "#FF8D59","#E6F598","#1A9850","#3288BD", "#542788"))
+
+# extract the relevant clusters
+sce_c <- sce[,grep("MG", sce$Cluster)]
+sce_c <- cbind(sce_c, sce[,sce$Cluster == 'Ctrl'])
+sce_c$Cluster <- droplevels(factor(sce_c$Cluster))
+sce_c$stage <- factor(sce_c$stage, levels = c(rev(levels(sce$stage))))
+
+# set the x and y values for the plot
+y <- sce_c$stage
+x <- as.numeric(droplevels(factor(sce_c$Cluster)))
+
+# create the df containing the x and y values
+df <- as.data.frame(table(y, x))
+colnames(df) <- c("y", "x", "Freq")
+
+# create data
+cluster <- as.numeric(levels(df$x)[df$x]) # x Axis
+value <- as.numeric(df$Freq)             # y Axis
+group <- df$y       # group, one shape per group
+data <- data.frame(cluster, value, group)
+
+
+# Compute percentages with dplyr
+data <- data  %>%
+  group_by(cluster, group) %>%
+  summarise(n = sum(value)) %>%
+  mutate(percentage = n / sum(n))
+x
+
+# plot
+ggplot(data, aes(fill=group, y=value, x=cluster)) + 
+  geom_bar(position="stack", stat="identity") +
+  ylab("Number of Cells")  + 
+  xlab(NULL) +
+  scale_x_discrete(breaks=c()) +
+  scale_fill_manual(values=temp, drop=F)
+
+ggsave(paste0(dirM, "MG bar chart percent.png"), height=3, width=5)
+```
+
+
+#GO plots
+save the all cluster GO object from a sce
+```{r}
+library(stringr)
+dirH <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/3. Small Clust Removed/DEGs (some)/0.0001 & 1.25/GO/"
+
+cell_type <- "Ctrl"
+clust <- levels(droplevels(sce[,grep(cell_type, sce$Cluster)]$Cluster))
+
+clusters <- NULL
+for (j in cell_type) {
+  for(i in clust) {
+    input <- NULL
+    try(input <- read.table(paste0(dirH,i, ".txt"), header = TRUE, sep ="\t", skip = 11))
+    if(!is.null(input)) {
+      name <- gsub("\\(", "", i) #must remove () for eval(parse()))
+      name <- gsub("\\)", "", name)
+      clusters <- c(clusters, name) 
+      assign(name, input)
+      input <- NULL
+      
+    }
+    input <- NULL
+  }
+}
+
+#extract just the GO and fold enrichment from each cluster & write as csv
+all <- NULL
+for(i in clusters) {
+  input <- eval(parse(text=i))
+  GO <- as.character(input$GO.biological.process.complete) 
+  FDR <- input[,grep("*FDR*", names(input))]
+  FE <- input[,grep("*Enrichment*", names(input))]
+  FE <- str_remove(FE, "> ")
+  FE <- str_remove(FE, "< ")
+  FE <- trimws(FE, which = "b", whitespace = "[ \t\r\n]")
+  FE <- as.numeric(FE)
+  Clust <- rep(i, length(FE))
+  GO_FE <- cbind(GO, FE, FDR, Clust)
+  all <- rbind(all, GO_FE)
+  assign(paste0("GO_FE_", i), GO_FE)
+  
+  write.csv(GO_FE, paste0(dirH, i, "_lim.csv" ))
+  
+}
+```
+
+read the save csv of interest
+```{r}
+data <- read.csv(paste0(dirH, "MG3B_lim2.csv"), blank.lines.skip=T)
+data$nlog_FDR <- -log2(as.numeric(data$FDR))
+data$logFE <- log2(as.numeric(data$FE))
+data$GO <- gsub(" \\(.*", "", data$GO)
+```
+
+plot GO as a barplot
+```{r}
+
+#plot
+
+pdf(file = paste0(dirH, "MG3B.pdf"), width = 6, height =8)
+# Increase margin size
+par(mar=c(4,20,0,0.5))
+
+# font siz
+f = 0.8
+x <- rev(data$nlog_FDR[order(data$FE)])
+y <- rev(data$GO[order(data$FE)])
+
+
+y=barplot(data$FE, names.arg = data$GO, horiz=T, las = 1, xlab = "Fold Enrichment", cex.names=f, cex.axis=f, col = "#99C1E8", xlim=c(0, max(data$FE)+0.5))
+points(x, y, pch=20, cex=1)
+
+dev.off()
+
+```
+
+#pearson's residuals
+- http://www.sthda.com/english/wiki/chi-square-test-of-independence-in-r (how to interpret)
+```{r}
+library(RColorBrewer)
+library(corrplot)
+
+cell_type <- "MG"
+SCE <- sce[,grep(cell_type, sce$Cluster)]
+SCE <- cbind(SCE, sce[,sce$Cluster == "Ctrl"])
+
+
+All <- (table(factor(SCE$Cluster), droplevels(SCE$cycl))) #repeat for cycl
+
+chisq <- chisq.test(All)
+
+# convert the z-scores (standardized residuals) to chi square values
+chisq.val <- chisq$stdres * chisq$stdres
+
+# convert the chi square values to p values
+chi.p <- pchisq(chisq.val, df=1, lower.tail=FALSE) 
+
+# correct for multiple testing:
+# compare the chi square values to the bonferonni adjusted p value
+bf.p <- (0.05/(nrow(All)*ncol(All)))
+
+pdf(paste0(dirM, "corr_", cell_type, ".pdf"))
+corrplot(chisq$stdres, p.mat=chi.p, is.cor = FALSE, sig.level = bf.p, tl.col = "black", method="color", cl.length =10, insig = "blank")
+dev.off()
+```
+
+#Plot double gene UMAP
+```{r}
+# convert the sce to a seurat object
+colnames(sce) <- make.unique(colnames(sce), sep = "X")
+seur <- as.Seurat(sce, data = "logcounts", assay="logcounts")
+```
+
+```{r}
+library(Seurat)
+library(ggplot2)
+# select the genes to plot
+x <- "Apoe" #Csf1r #Trem2
+y <- "Trem2"
+
+# generate the UMAPs
+list <- FeaturePlot(object=seur,
+                    features=c(x, y), 
+                    cols=c("grey70", "purple", "yellow"), 
+                    reduction="UMAP",
+                    blend=TRUE,
+                    combine=F,
+                    blend.threshold=0,
+                    pt.size=0.5)
+
+# convert the UMAP dots to a single image (easier handling in Illustrator)
+#AugmentPlot(plot=list[[3]]+NoLegend() + labs(title=NULL), dpi=600)  
+list[[3]]+NoLegend()
+#ggsave(paste0(dirM, x, "vs", y,".png"), scale = 0.5, width = 10, height = 8)
+
+# plot and save the legend
+list[[4]]+NoLegend()
+#ggsave(paste0(dirM, x, "vs", y," legend.png"), scale = 0.5, width = 10, height = 8)
+
+```
+
+
+# calculate average for each cluster Trem2, Fabp5, Apoe (to match smFISH)
+calculate average expression
+```{r}
+input <- c("Trem2", "Fabp5", "Apoe")
+
+SCE <- sce[,grep(cell_type, sce$Cluster)]
+SCE <- cbind(SCE, sce[,sce$Cluster == "Ctrl"])
+SCE$Cluster <- droplevels(SCE$Cluster) 
+
+level <- factor(SCE$Cluster)
+
+AVE <- NULL
+for (i in 1:nlevels(level)){ #repeat for the number of clusters in the sce object
+  ave <- calculateAverage(SCE[input, SCE$Cluster == levels(level)[i] ], exprs_values = "logcounts")
+  AVE <- cbind(AVE, ave)
+}
+colnames(AVE) <- levels(level)
+rownames(AVE) <- input
+```
+
+plot
+```{r}
+library(pheatmap)
+
+#scale down:
+t <- which(AVE > 8)
+AVE[t] <- 8
+
+pheatmap(AVE, color=viridis::viridis(500), cluster_cols=F, cluster_rows=F, drop_levels = T, fontsize = 7, border_color = NA, file = paste0(dirM, "Trem-Apoe-Fabp5.png"), scale="row", height=3, width = 3.5)
+```
+
+# boxplots for the genes of interest
+```{r}
+library(ggplot2)
+library(RColorBrewer)
+library(ggpubr)
+
+cell_type <- "MG"
+#SCE <- sce[,grep(cell_type, sce$Cluster)]
+#SCE <- cbind(SCE, sce[,sce$Cluster == "Ctrl"])
+
+# set the genes of interest
+i <- "Igf1"
+
+x <- SCE$Cluster
+col <- droplevels(SCE$Cluster)
+
+logs <- as.numeric(logcounts(SCE[i]))
+df <- data.frame(Logs=logs, x=x, colour=col)
+
+#add empty slots for Ctrl to keep the spacing
+#df.a <- data.frame(Logs=c(0,0,0, 0, 0), x=c("Ctrl", "Ctrl", "Ctrl", "10", "21"), colour=c("Monocyte", "Dendritic_Cells", "Neutrophil", "Neutrophil", "Neutrophil"))
+#df <- rbind(df, df.a)
+
+ggplot(data=df, aes(y=Logs, x=x, fill=colour)) + geom_boxplot() + ggtitle(i) + theme(plot.title=element_text(hjust=0.5)) + ylab("logounts") + xlab(NULL) + scale_fill_brewer(palette="Accent", direction=1) + theme(plot.title=element_text(hjust=0.5), legend.position="none") 
+
+
+ggsave(paste0(dirM,"boxplot_", i, ".png"), scale=1, height=3, width =2)
+```
+
+#homeostatic genes dot plot
+```{r}
+library(Seurat)
+library(ggplot2)
+SCE <- sce[,grep("MG", sce$Cluster)]
+SCE <- cbind(SCE, sce[,sce$Cluster == "Ctrl"])
+
+# extract the MG and convert the sce to a Seurat object
+seur <- as.Seurat(SCE, data="logcounts", assay="logcounts")
+```
+
+```{r}
+MG_genes <- c("Olfml3","Sparc", "Trem2", "C1qa", "C1qb",  "Ctss","Csf1r", "Hexb","Gpr34", "P2ry12","Plxdc2", "Sall1", "Siglech","Cx3cr1","Tmem119","Serpine2")
+
+DotPlot(seur,
+        features=MG_genes,
+        group.by = "Cluster",
+        cols = "RdBu",
+        scale =F,
+        assay="logcounts") + theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+ggsave(paste0(dirM,"MG markers.png"), width = 8, height = 2.75)
+```
+
+#gene expression cds with trajectory
+```{r}
+cds <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/4. MG4 removed/cds.RDS")
+```
+
+```{r}
+dirU <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/3. Small Clust Removed/"
+library(ggplot2)
+cby =  "cluster"
+plot_cells(cds,
+           gene = "Apoe",
+           color_cells_by = cby,
+           label_cell_groups=F,
+           label_leaves=F,
+           label_roots = F,
+           label_branch_points=F,
+           graph_label_size=3,
+           group_label_size = 4,
+           label_groups_by_cluster = F,
+           show_trajectory_graph = T,
+           alpha = 1,
+           #  cell_size = 
+           labels_per_group=1
+)#+ scale_fill_manual(values=temp) + geom_point(aes(fill=colData(cds[0])[cby][,1]), pch=21, stroke = .0, alpha = 1, size=0.5) 
+#save the plot
+ggsave(paste0(dirU, cby, ".png"), scale = 0.5, width = 10, height = 8)
+```
+
+#Heatmap of DAMS by cluster
+```{r}
+library(scater)
+#load the sce
+path <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/1. Comparing w lit/Apoe/"
+sce.hm <- sce[,grep("MG", sce$Cluster)]
+sce.hm <- cbind(sce.hm, sce[,sce$Cluster == "Ctrl"])
+colnames(sce.hm) <- make.unique(colnames(sce.hm), sep="X")
+sce.hm$Cluster <- droplevels(sce.hm$Cluster)
+source("/Users/reganhamel/Documents/PhD/scRNAseq Workflow/PhD_Dissertation/Chapter_5/Sources/Fxn - Prep Genes.R")
+
+#Establish the DAM gene lists (from Keren-Shaul et al., 2017; Figure 6)
+
+#homeostatic genes
+hG <- c("Cst3, Ctsd, Csf1r, Ctss, Sparc, C1qa, C1qb, Hexb, Cx3cr1, P2ry12, Cd33, Tmem119")
+# DAM phase 1 (Trem independent)
+DAM1 <- c("Apoe, Tyrobp, Ctsb, Ctsd, B2m, Fth1, Lyz2") 
+
+# DAM phase 2 (Trem dependent)
+DAM2 <- c("Trem2, Axl, Cst7, Ctsl, Lpl, Cd9, Csf1, Ccl6, Itgax, Clec7a, Lilrb4a, Timp2")  
+
+# separate the string
+hG <- prepG(hG, sep = ", ")
+DAM1 <- prepG(DAM1, sep = ", ")
+DAM2 <- prepG(DAM2, sep = ", ")
+
+list <- c(hG, DAM1, DAM2)
+
+#keep only genes in HVGs
+list[!(list %in% rownames(sce))]
+list <- list[(list %in% rownames(sce))] #Lilrb4a" removed
+
+#Generate and save the heatmap
+plotHeatmap(sce.hm, features=list, exprs_values="logcounts", cellheight=5, cellwidth=0.03, cluster_cols=F, cluster_rows=F, columns=order(sce.hm$Cluster), colour_columns_by=c("Cluster"), file=paste0(path, "DAMs by Clust.png"), fontsize=5, show_rownames=T, center=F, symmetric=F, zlim=c(0,9))
+```
+
+#boxplots of Fabp5+ vs -
+```{r}
+sce_c <- sce[,grep("MG", sce$Cluster)]
+sce_c <- cbind(sce_c, sce[,sce$Cluster == "Ctrl"])
+sce_c$Cluster <- droplevels(factor(sce_c$Cluster))
+
+#DAM2 <- c("Trem2, Axl, Cst7,  Lpl, Cd9, Csf1, Ccl6, Itgax, Clec7a, Lilrb4a, Timp2")  #Ctsl,
+#DAM1 <- c("Tyrobp, Ctsb, Ctsd, Apoe, B2m, Fth1, Lyz2") 
+
+M0 <- c("Hexb", "P2ry12", "Mertk", "Entpd1", "Tmem119", "Tgfbr1") #neuroprotective genes #"Smad3",  not in HVG
+source("/Users/reganhamel/Documents/PhD/scRNAseq Workflow/PhD_Dissertation/Chapter_5/Sources/Fxn - Prep Genes.R")
+
+#DAM2 <- prepG(DAM2, sep = ", ")
+#DAM1 <- prepG(DAM1, sep = ", ")
+
+# sce_c$logMeanDAM2 <- colMeans(logcounts(sce_c[DAM2]))
+# sce$logMeanDAM2 <- colMeans(logcounts(sce[DAM2]))
+# 
+# sce_c$logMeanDAM1 <- colMeans(logcounts(sce_c[DAM1]))
+# sce$logMeanDAM1 <- colMeans(logcounts(sce[DAM1]))
+# 
+# sce$logMeanDAM <- colMeans(logcounts(sce[c(DAM1, DAM2)]))
+
+sce_c$logMeanM0 <- colMeans(logcounts(sce_c[M0]))
+sce_c$logMedM0 <- colMedians(as.matrix(logcounts(sce_c[M0])))
+```
+
+#separate by Fabp5 pos vs neg
+```{r}
+n <- 15 #number of transcripts #1.5 good
+med <- 1
+p <- 1 #percent of gene list
+c <- counts(sce_c)["Fabp5",]
+sce_c$FABP5  <- (c >= n) # >= (length("Fabp5")*p)
+
+sce_c$FABP5_grad <- sce_c$FABP5 
+sce_c$FABP5_grad[(c >= med)] <- rep("Med", length(sce_c$FABP5_grad[(c >= med)]))
+sce_c$FABP5_grad[sce_c$FABP5] <- rep("High", length(sce_c$FABP5[sce_c$FABP5]))
+sce_c$FABP5_grad[sce_c$FABP5_grad == F] <- rep("Low", length(sce_c$FABP5[sce_c$FABP5_grad == F]))
+
+sce_c$FABP5_grad <- factor(sce_c$FABP5_grad, levels = c("High", "Med", "Low"))
+```
+
+Generate the boxplots for the genes of interest
+```{r}
+dirF <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/3. Small Clust Removed/Characterising MG/"
+library(RColorBrewer)
+
+# set the x values
+x <- sce_c$Cluster
+
+# set the values to colour the plot by
+col <- sce_c$FABP5_grad
+
+# set the per cell metric level
+sublevel <- "logMed" #total_features_by_counts_ log10_total_counts_ pct_counts_
+
+# the gene lists names for designating which per cell metrics, and for labelling plots
+names <- c("M0")
+
+# generate the plots for each gene list
+for (i in names) {
+  
+  # build the data frame for plotting
+  sl <- paste0(sublevel, i )
+  logs <- colData(sce_c)[sl][,1]
+  
+  df <- data.frame(Logs=logs, x=x, colour=col)
+  df.a <- data.frame(Logs=c(0,0), x=c("Ctrl"), colour=c("High")) #fill empty slots
+  df <- rbind(df, df.a)
+  
+  # plot
+  p <- ggplot(data=df, aes(y=Logs, x=x, fill=colour)) + geom_boxplot() + theme(plot.title=element_text(hjust=0.5)) + ylab("Median logcounts") + xlab(NULL) + scale_fill_brewer(palette="Accent", direction=1) + theme_bw()
+  
+  # save
+  ggsave(paste0(dirM,"FABP5 vs NEUROPROTECTIVE grad-", i, sublevel, ".png"), scale=1, height=3, width=6)
+}
+
+p
+```
+
+
+#boxplot for gene/fabp5 over time by cluster
+Generate the box plot
+```{r}
+dirF <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/4. MG4 removed/MG/"
+library(ggplot2)
+library(RColorBrewer)
+sce_c <- sce[,grep("MG\\(2", sce$Cluster)]
+sce_c$Cluster <- droplevels(factor(sce_c$Cluster))
+
+# set the clusters
+x <- sce_c$Cluster
+col <- sce_c$cycl
+
+# generate plots for each gene
+i = "Cdk1"
+
+# extract the log10-transformed counts for the gene of interest
+logs <- as.numeric(logcounts(sce_c[i]))
+
+df <- data.frame(Logs=logs, x=rep("Cdk1", length(logs)), col = col)
+df <- rbind(df, data.frame(Logs=as.numeric(logcounts(sce_c["Msr1"])), x=rep("Msr1", length(sce_c$Cluster)), col = col))
+df <- rbind(df, data.frame(Logs=as.numeric(logcounts(sce_c["P2ry12"])), x=rep("P2ry12", length(sce_c$Cluster)), col = col))
+#logsb <- as.numeric(logcounts(sce_b[i]))
+# df.a <- data.frame(Logs =logsb, x=(sce_b$stage), col = rep("MG", length(logsb)))
+#df <- rbind(df, df.a)
+#plot
+ggplot(data=df, aes(y=Logs, x=col, fill=x)) + geom_boxplot() + theme(plot.title=element_text(hjust=0.5)) + ylab("logcounts")  + scale_fill_manual(values=c( brewer.pal(5,"RdYlGn"), "grey40")) + theme_bw() +xlab(NULL)
+
+
+# save and size
+ggsave(paste0(dirF,"boxplot-MG2", i, ".png"), scale=1, height=2, width=7)
+
+```
