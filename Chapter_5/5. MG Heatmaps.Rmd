@@ -1,0 +1,167 @@
+---
+title: "R Notebook"
+---
+
+## Heatmap
+```{r}
+sce <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/4. MG4 removed/sce.RDS")
+```
+
+```{r}
+dirM <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/4. MG4 removed/"
+#sce_hm <- sce[,sce$Cluster == "MG(3B)" | sce$Cluster == "MG(3)" | sce$Cluster == "MG(3A)"]
+sce_hm <- sce[,sce$Cluster == "MC(4A)"]
+
+#sce_hm$Fabp5 <- counts(sce_hm)["Fabp5",] >= 3
+
+
+# add an X to the end of the second instance of each duplicated barcode to give it a unique name (the heatmap code requires unique barcodes)
+colnames(sce_hm) <- make.unique(colnames(sce_hm), sep="X")
+```
+
+#DAm1/2 genes
+```{r}
+source("//Users/reganhamel/Documents/PhD/scRNAseq Workflow/PhD_Dissertation/Chapter_5/Sources/Fxn - Prep Genes.R")
+
+DAM1 <- c("Tyrobp, Ctsb, Ctsd, Apoe, B2m, Fth1, Lyz2") 
+
+# DAM phase 2 (Trem dependent) Keren-Shaul
+DAM2 <- c("Trem2, Axl, Cst7, Ctsl, Lpl, Cd9, Csf1, Ccl6, Itgax, Clec7a, Lilrb4a, Timp2")  
+
+
+
+
+input <- c(DAM1, DAM2)
+input <- prepG(input,sep=", ", sce)
+
+plotHeatmap(sce_hm, features=input, exprs_values="logcounts", cellheight=5,
+            zlim=c(0,9), center=FALSE, symmetric=FALSE, cluster_cols=F, cluster_rows=F,
+            colour_columns_by=c("cycl","Cluster"), columns=order(sce_hm$Cluster), fontsize_row=5, fontsize_col=0.1, treeheight_col=10, file=paste0(dirM, "DAM.png"), fontsize=5, cellwidth=0.015, scale = "none")
+```
+
+
+
+
+#heatmap of inf vs resident in MG(3B)
+#from txt
+```{r}
+input <- readLines(con="/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/3. Small Clust Removed/DEGs (some)/0.0001 & 1.25/MG3B genes.txt")
+
+input <- c("Siglech", "Gpnmb", "Ms4a7", "Fabp5", "Lyz2", input[1:30]) 
+
+```
+
+```{r}
+#input <- c("Fabp5", "Apoe", "Lpl", "Trem2", "Igf1", "Cst7")
+
+plotHeatmap(sce_hm, features=input, exprs_values="logcounts", cluster_cols=F, cluster_rows=T, columns=order(sce_hm$cell_type), 
+            zlim=c(0,3), colour_columns_by=c("fl", "cell_type"), file=paste0(dirM, "Mac2.png"), fontsize=3, show_rownames=T, center=F, symmetric=F, cellheight=5, cellwidth=0.1, scale = "none")
+
+```
+
+#mac vs microglia fig
+```{r}
+
+plotHeatmap(sce_hm, features=input, exprs_values="logcounts", cellheight=5,
+            zlim=NULL, center=FALSE, symmetric=FALSE, cluster_cols=F, cluster_rows=T,
+            colour_columns_by=c("fl", "cell_type", "cycl"), columns=order(sce_hm$cell_type), fontsize_row=5, fontsize_col=0.1, treeheight_col=10, file=paste0(dirM, "Mac.png"), fontsize=7, cellwidth=0.08)
+```
+
+#heatmap of neuroptrotective
+```{r}
+sce_hm <- sce[,grep("MG", sce$Cluster)]
+sce_hm <- cbind(sce_hm, sce[,sce$Cluster == "Ctrl"])
+sce_hm$Cluster <- droplevels(factor(sce_hm$Cluster))
+```
+
+#Krasemann
+```{r}
+#neuroprotective genes Krasemann
+M0 <- c("Hexb", "P2ry12", "Mertk", "Entpd1", "Tmem119", "Tgfbr1")  #"Smad3",  not in HVG
+MGnD <- c("Clec7a", 'Lgals3', "Gpnmb", "Itgax", "Spp1", "Ccr2", "Fabp5")
+
+plotHeatmap(sce_hm, features=c(M0, MGnD), exprs_values="logcounts", cellheight=5,
+            zlim=c(0,6), center=FALSE, symmetric=FALSE, cluster_cols=F, cluster_rows=F,
+            colour_columns_by=c("cycl","Cluster"), columns=order(sce_hm$Cluster), fontsize_row=5, fontsize_col=0.1, treeheight_col=10, file=paste0(dirM, "neuroprotective v MGnD.png"), fontsize=5, cellwidth=0.015, scale = "none")
+```
+
+#Hif1a
+
+cluster m1
+```{r}
+sce_hm <- sce[,grep("MG\\(1", sce$Cluster)]
+sce_hm$Cluster <- droplevels(factor(sce_hm$Cluster))
+table(sce_hm$Cluster)
+```
+
+```{r}
+#neuroprotective genes Krasemann
+input <- c("Hif1a","Fabp5", "Csf1r")
+plotHeatmap(sce_hm, features=input, exprs_values="logcounts", cellheight=5,
+            zlim=c(0,3), center=FALSE, symmetric=FALSE, cluster_cols=T, cluster_rows=F,
+            colour_columns_by=c("cycl","Cluster"), columns=order(sce_hm$cycl), fontsize_row=5, fontsize_col=0.1, treeheight_col=10, file=paste0(dirM, "Hif1a.png"), fontsize=5, cellwidth=0.015, scale = "row")
+```
+
+
+#Cluster MG(4A) CAMs
+```{r}
+input  = c("Mrc1", "Lyve1", "Cd163", "Cbr2", "Ms4a7", "Cd74","H2-Eb1", "H2-Aa", "Plac8", "H2-Ab1", "H2-DMb1", "H2-DMa", "Klrd1") #Itgax (expressed in activated MG too) # not in HVG #low Siglec1 #no CAM genes in HVG
+
+
+  plotHeatmap(sce_hm, features=input, exprs_values="logcounts",
+            zlim=c(0,6), center=FALSE, symmetric=FALSE, cluster_cols=F, cluster_rows=T,
+            colour_columns_by=c("cell_type","fl"), columns=order(sce_hm$cell_type), fontsize_row=5, fontsize_col=0.1, treeheight_col=10, file=paste0(dirM, "4A CAMs plus.png"), fontsize=5,  scale = "none", cellheight=5, cellwidth=0.2)
+```
+
+#foamy macs & LDAM
+https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7217201/
+
+```{r}
+colnames(sce) <- make.unique(colnames(sce), sep="X")
+
+sce_hm <- sce[,grep("MG", sce$Cluster)]
+sce_hm <- cbind(sce_hm, sce[,grep("Ctrl", sce$Cluster)])
+sce_hm$Cluster <- droplevels(factor(sce_hm$Cluster))
+table(sce_hm$Cluster)
+```
+
+```{r}
+library(scater)
+input <- c("Fabp5","Lgals3", "Ctsb",   "Trem2", "Cd9", "Spp1", "Aldoa")
+plotHeatmap(sce_hm, features=c(input), exprs_values="logcounts", cellheight=5,
+            zlim=c(0,7), center=FALSE, symmetric=FALSE, cluster_cols=F, cluster_rows=F,
+            colour_columns_by=c("Cluster"), columns=order(sce_hm$Cluster), fontsize_row=4, fontsize_col=0.1, treeheight_col=10, file=paste0(dirM, "Foamy LDAM MC.png"), fontsize=4, cellwidth=0.007, scale = "none")
+```
+
+
+#LDAM -- nothing
+
+CD63, ATP6V1A, ATP6V1C1, ATP6V1G1 and TUBA1), genes involved in vesicular transport (RAB5B and RAB7), and CD22, a negative regulator of phagocytosis in microglia21. Interestingly, most genes linked to nitric oxide and ROS generation (for example, CAT, KL, PPP1CB, JAK and RAP1B
+```{r}
+LDAM <- c('Slc33a1', "Snx17", 'Vps35', 'Cln3', 'Npc2', 'Grn', 'Cd63', 'Atp6v1a', "Atp6v1c1", "Atp6v1g1", "Tuba1a", "Rab5b", "Rab7", "Cd22", "Cat", "Kl", "Ppp1cb", "Jak2", "Rap1b", "Plin3", "Acly")
+LDAM <- LDAM[(LDAM %in% rownames(sce))]
+```
+
+
+
+
+
+#cargo
+```{r}
+colnames(sce) <- make.unique(colnames(sce), sep="X")
+
+sce_hm <- sce
+table(sce_hm$Cluster)
+```
+
+```{r}
+input <- as.matrix(read.csv("/Users/reganhamel/Documents/PhD/scRNAseq Workflow/Gene Lists/Phago Cargo Clust IIb.txt"))
+input <- input[input %in% rownames(sce)]
+```
+
+```{r}
+library(scater)
+plotHeatmap(sce_hm, features=c(input), exprs_values="logcounts", cellheight=4,
+            zlim=c(0,7), center=FALSE, symmetric=FALSE, cluster_cols=F, cluster_rows=F,
+            colour_columns_by=c("Cluster"), columns=order(sce_hm$Cluster), fontsize_row=4, fontsize_col=0.1, treeheight_col=10, file=paste0(dirM, "Cargo.png"), fontsize=4, cellwidth=0.01, scale = "none")
+```

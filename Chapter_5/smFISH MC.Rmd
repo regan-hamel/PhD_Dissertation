@@ -1,0 +1,186 @@
+---
+title: "R Notebook"
+---
+
+```{r}
+#load metadata
+meta <- read.csv("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/smFISH/raw spatial data/scexp_obs_120721.csv")
+
+#load spot counts
+spots <- read.csv("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/smFISH/raw spatial data/scexp_x_120721.csv", header =F)
+colnames(spots) <- c("Trem2", "Fabp5", "Apoe")
+
+#combine the two:
+FISH <- cbind(meta, spots)
+table(FISH$Celltype)
+
+FISH$ROI <- factor(FISH$ROI, levels = c("Core", "1st", "2nd", "3rd", "NASC"))
+#replace cluster names with cell type
+FISH$Celltype <- factor(FISH$Celltype, levels=c(levels(FISH$Celltype), "Inf", "Res"))
+FISH$Celltype[grep("MC", FISH$Celltype)] <- "Inf"
+FISH$Celltype[grep("MG", FISH$Celltype)] <- "Res"
+
+FISH$Celltype <- droplevels(FISH$Celltype)
+table(FISH$Celltype)
+```
+
+# select cell type 
+```{r}
+FISH <- FISH[FISH$Celltype == "Inf",]
+```
+
+# bin cells 
+
+# calculate average for each cluster Trem2, Fabp5, Apoe (to match smFISH)
+calculate average expression
+```{r}
+sce <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/4. MG4 removed/sce.RDS")
+sce$Cluster <- factor(sce$Cluster, levels = c("Ctrl", "MG(1)", "MG(2)", "MG(3)",  "MG(3A)", "MG(3B)", "MC(1)",  "MC(2A)", "MC(3A)", "MC(4A)", "MC(2B)", "MC(3B)", "MC(2C)",  "DC(1)",  "DC(2)",  "DC(3)",  "NP", "TCell" ))
+
+dirS <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/5. Intersecting w smFISH/MC/"
+```
+
+```{r}
+input <- c("Trem2", "Fabp5", "Apoe") #c("Trem2", "Fabp5", "Apoe")
+cell_type <- "MC"
+
+SCE <- sce[,grep(cell_type, sce$Cluster)]
+SCE <- cbind(SCE, sce[,grep("DC", sce$Cluster)])
+SCE <- cbind(SCE, sce[,grep("NP", sce$Cluster)])
+SCE$Cluster <- droplevels(SCE$Cluster) 
+
+level <- factor(SCE$Cluster)
+
+AVE <- NULL
+for (i in 1:nlevels(level)){ #repeat for the number of clusters in the sce object
+  ave <- calculateAverage(SCE[input, SCE$Cluster == levels(level)[i] ], exprs_values = "logcounts")
+  AVE <- cbind(AVE, ave)
+}
+colnames(AVE) <- levels(level)
+rownames(AVE) <- input
+```
+
+plot seq
+```{r}
+library(pheatmap)
+
+pheatmap(AVE, color=viridis::viridis(500), cluster_cols=F, cluster_rows=F, drop_levels = T, fontsize = 7, border_color = NA, file = paste0(dirS, "Trem2-Apoe-Fabp5", cell_type, ".png"), scale="row", height=3, width = 5)
+```
+
+```{r}
+range(FISH$Trem2)
+median(FISH$Trem2)
+Trem2 <- cut(FISH$Trem2, 
+                  breaks=c(0, 5, 10, 20, 70),
+                  include.lowest=TRUE, 
+                  right=FALSE, 
+                  labels=c("neg", "low", "med", "high"))
+
+table(Trem2)
+FISH$Trem2_bin <- Trem2
+
+range(FISH$Fabp5)
+median(FISH$Fabp5)
+Fabp5 <- cut(FISH$Fabp5, 
+                  breaks=c(0, 5, 25, 30, 100),
+                  include.lowest=TRUE, 
+                  right=FALSE, 
+                  labels=c("neg", "low", "med", "high"))
+
+table(Fabp5)
+FISH$Fabp5_bin <- Fabp5
+
+range(FISH$Apoe)
+median(FISH$Apoe)
+Apoe <- cut(FISH$Apoe, 
+                  breaks=c(0, 5, 15, 25, 100),
+                  include.lowest=TRUE, 
+                  right=FALSE, 
+                  labels=c("neg", "low", "med", "high"))
+
+table(Apoe)
+FISH$Apoe_bin <- Apoe
+```
+
+# label clusters with bins
+```{r}
+FISH$Cluster <- c(1)
+
+
+#MC2A
+MC2A <-   FISH$Fabp5_bin == "med" #& FISH$Trem2_bin == "low" & FISH$Apoe_bin == "low"
+FISH$Cluster[MC2A] <- "MC(2A)"
+
+#MC(3A)
+MC3A <- FISH$Fabp5_bin == "high" #& FISH$Trem2_bin == "med"  & FISH$Apoe_bin == "med" 
+FISH$Cluster[MC3A] <- "MC(3A)"
+
+#MC4A
+MC4A <-   FISH$Fabp5_bin != "high" & (FISH$Trem2_bin == "high" ) & (FISH$Apoe_bin == "high" )
+FISH$Cluster[MC4A] <- "MC(4A)"
+
+#other clusters
+Other <-  FISH$Cluster == 1
+  #(FISH$Fabp5_bin == "low"| FISH$Fabp5_bin == "neg") & (FISH$Trem2_bin == "low") & (FISH$Apoe_bin == "low"|FISH$Apoe_bin == "neg") |
+FISH$Cluster[Other] <- "Other"
+
+table(FISH$Cluster, FISH$Condition)
+```
+
+#sanity check clusters 
+```{r}
+tot <- NULL
+level <- levels(factor(FISH$Cluster))
+for (i in level){ #repeat for the number of clusters in the sce object
+  fish <- FISH[FISH$Cluster == i,]
+  Trem2 <- mean(fish$Trem2)
+  Fabp5 <- mean(fish$Fabp5)
+  Apoe <- mean(fish$Apoe)
+  TOT <- rbind(Trem2, Fabp5, Apoe)
+  tot <- cbind(tot, TOT)
+}
+rownames(tot) <- c("Trem2", "Fabp5", "Apoe")
+colnames(tot) <- level
+
+tot <- tot#[,-1]
+
+library(pheatmap)
+
+pheatmap(tot, color=viridis::viridis(500), cluster_cols=F, cluster_rows=F, drop_levels = T, fontsize = 7, border_color = NA, scale = "row")#, file = paste0(dirS, "Trem2-Apoe-Fabp5 smFISH", cell_type, ".png"),height=3, width = 3.5)
+```
+
+
+
+#prepare the plot object
+
+- fraction of cells per ROI by dpi
+
+```{r}
+library(pheatmap)
+
+#set the dpi
+dpi = 21
+
+FISH_x <- FISH[FISH$Cluster != 1,]
+FISH_x$Cluster <- droplevels(factor(FISH_x$Cluster))
+
+#set the cond of interest
+FISH_x <- FISH_x[FISH_x$Condition == dpi,]
+
+
+
+Others <- table(FISH_x$Cluster[FISH$Condition != "HC"], FISH_x$ROI[FISH$Condition != "HC"])
+
+#normalise by number of cells per core
+div <- rbind(colSums(Others), colSums(Others), colSums(Others), colSums(Others))
+tw <- ((Others)/div)
+
+
+
+num <- 50
+myBreaks <-  c(seq(-0.75, 0, length.out=ceiling(num/2) + 1), 
+               seq(0.75/num, 0.75, length.out=floor(num/2)))
+
+pheatmap(tw, color=colorRampPalette(c("#2166AC", "white","#67000D"))(num), breaks = myBreaks ,cluster_cols=F, cluster_rows=F, drop_levels = T, border_color = "black", file = paste0(dirS, dpi,"dpi smFISH.png"), height=3, width = 3.5)
+```
+
