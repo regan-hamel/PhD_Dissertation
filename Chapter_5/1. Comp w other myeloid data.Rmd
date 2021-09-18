@@ -81,18 +81,20 @@ plotHeatmap(sce.hm, features=list, exprs_values="logcounts", cellheight=5, cellw
 ```
 
 
-#area plot
+#bar chart to compare smFISH
 Generate the area plot (using sce_comp)
 ```{r}
-gene <- "Serpine2"
-fl <- "Resident"
-sce_comp <- sce[,sce$cell_type == "Microglia" | sce$cell_type == 'CAMs']#  & sce$cell_type != "CAMs" ]
+gene <- "Ms4a7"
+fl <- "Infiltrating"
+#sce_comp <- sce[,sce$cell_type == "Microglia" | sce$cell_type == 'CAMs']#  & sce$cell_type != "CAMs" ]
+sce_comp <- sce[,sce$fl == fl]
 sce_comp$gene <- counts(sce_comp)[gene,] > 0
 temp <- c("#D53E4F", "#FF8D59","#E6F598","#1A9850","#3288BD", "#542788")
 
 ```
 
 ```{r}
+library(dplyr)
 #count the number of genes of a certain UMI per cluster
 # set the x and y values for the plot
 y <- sce_comp$gene
@@ -122,7 +124,7 @@ data <- data  %>%
 d <- data[data$group !=F,]
 
 pdf(paste0(path, gene,"_", fl, ".pdf"), height = 5, width = 3)
-barplot(height = (d$percentage)*100, space=0.1, names.arg = levels(sce$stage), xlab = level.n, ylab = "Fraction of Cells (%)", ylim = c(0,100), col=temp, beside=T) 
+barplot(height = (d$percentage)*100, space=0.1, names.arg = levels(droplevels(factor(sce_comp$stage))), ylab = "Fraction of Cells (%)", ylim = c(0,100), col=temp[-1], beside=T) 
 dev.off()
 ```
 
@@ -334,7 +336,7 @@ sceH <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRN
 sceH <- sceH[,sceH$stage == "HC"  | sceH$stage == "1" | sceH$stage == "2"]
 ```
 
-# prepare the gene lists
+# hammond and milich cycling 
 ```{r}
 library(scater)
 
@@ -492,3 +494,104 @@ ggplot(data, aes(x=time, y=percentage, fill=group)) +
 
 ggsave(paste0(path, "/Area Plot",CT, ".png"), height=5, width=6)
 ```
+
+#male vs female
+```{r}
+sceA <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/4. MG4 removed/sce.RDS")
+
+dirA <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/sexes/"
+```
+
+Plot the UMAP using the mouse strain/fluorophore of interest and grey out the cells not of interest
+```{r}
+library(scater)
+library(RColorBrewer)
+library(Seurat)
+sce <- sceA
+
+# name for labelling the UMAP
+name <- "grey by sex"
+
+# choose how to colour and shape the UMAP
+#colours <- c(brewer.pal(nlevels(sceA$cell_type), "Accent"),"grey95")
+colours <- c("#D53E4F", "#FF8D59","#E6F598","#1A9850","#3288BD", "#542788", "grey50")
+
+# choose the level to determine the grey
+subset <- "sex"
+
+# choose the level to colour the non-grey cells
+col.name <- "stage"
+
+# automatically set parameters
+level <- colData(sce)[subset][,1]
+
+# load the sce and generate the UMAP for each timepoint
+for (j in levels(factor(level))) {
+  sce <- sceA
+  
+  #set the colour category for the grey
+  grey <- level != j
+  
+  # rename levels to include "grey" for those not of interest
+  col <- colData(sce)[col.name][,1] # set the level to colour the non-grey cells
+  sce$grey <- factor(col, levels=c(levels(col), "grey"))
+  sce$grey[grey] <- "grey"
+  
+  #sort the cells in order to have the grey cells last (and therefore underneath)
+  sce <- sce[,rev(order(colnames(sce)[sce$grey]))]
+  
+  # generate the UMAP for the timepoint
+  plotUMAP(sce, colour_by="grey",by_exprs_values="logcounts", point_size = 0) +  ggtitle(paste0(j))  + theme(plot.title=element_text(size=rel(2)))   + geom_point(aes(fill=colData(sce)$grey), colour="grey50", pch=21, stroke = .1, size =2, alpha = 0.6) + scale_fill_manual(values=colours, drop=F)#+ theme(legend.position="none")
+  
+  # name and save the plot to combine with the other timepoints  
+  ggsave(filename=paste0(name," ", j, "egend.png"), path=dirA, scale=1, width=8, height=8, dpi=300, limitsize=TRUE) 
+}
+
+```
+
+Plot just a single samples
+```{r}
+library(scater)
+library(RColorBrewer)
+library(Seurat)
+sce <- sceA
+
+# name for labelling the UMAP
+name <- "grey by sex"
+
+# choose how to colour and shape the UMAP
+#colours <- c(brewer.pal(nlevels(sceA$cell_type), "Accent"),"grey95")
+colours <- c("#F1A340", "#542788", "grey90")
+
+# choose the level to determine the grey
+subset <- "sampleID"
+
+ 
+# choose the level to colour the non-grey cells
+col.name <- "sex"
+
+
+# load the sce and generate the UMAP for each timepoint
+
+  sce <- sceA
+  
+  #set the colour category for the grey
+  grey <- sce$sampleID == "SIGAF11" #| sce$sampleID == "SIGAG5" # | sce$sampleID == "SIGAE11" | sce$sampleID == "SIGAF11"
+  
+  # rename levels to include "grey" for those not of interest
+  col <- colData(sce)[col.name][,1] # set the level to colour the non-grey cells
+  sce$grey <- factor(col, levels=c(levels(factor(col)), "grey"))
+  sce$grey[!grey] <- "grey"
+  
+  #sort the cells in order to have the grey cells last (and therefore underneath)
+  sce <- sce[,rev(order(colnames(sce)[sce$grey]))]
+  
+  # generate the UMAP for the timepoint
+  plotUMAP(sce, colour_by="grey",by_exprs_values="logcounts", point_size = 0)  + theme(plot.title=element_text(size=rel(2)))   + geom_point(aes(fill=colData(sce)$grey), colour="grey70", pch=21, stroke = .1, size =1, alpha = 0.6) + scale_fill_manual(values=colours, drop=F)
+  
+  # name and save the plot to combine with the other timepoints  
+ ggsave(filename=paste0("SIGAF11.png"), path=dirA, scale=1, width=8, height=8, dpi=300, limitsize=TRUE) 
+
+
+```
+
