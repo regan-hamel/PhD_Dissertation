@@ -173,8 +173,8 @@ seur <- as.Seurat(sce, data = "logcounts", assay="logcounts")
 library(Seurat)
 library(ggplot2)
 # select the genes to plot
-x <- "Apoe" #Csf1r #Trem2
-y <- "Trem2"
+x <- "Fabp5" #Csf1r #Trem2
+y <- "Abcg1"
 
 # generate the UMAPs
 list <- FeaturePlot(object=seur,
@@ -192,7 +192,7 @@ list[[3]]+NoLegend()
 #ggsave(paste0(dirM, x, "vs", y,".png"), scale = 0.5, width = 10, height = 8)
 
 # plot and save the legend
-list[[4]]+NoLegend()
+#list[[4]]+NoLegend()
 #ggsave(paste0(dirM, x, "vs", y," legend.png"), scale = 0.5, width = 10, height = 8)
 
 ```
@@ -201,7 +201,8 @@ list[[4]]+NoLegend()
 # calculate average for each cluster Trem2, Fabp5, Apoe (to match smFISH)
 calculate average expression
 ```{r}
-input <- c("Trem2", "Fabp5", "Apoe")
+input <- c("Trem2", "Fabp5", "Csf1r") #c("Trem2", "Fabp5", "Apoe")
+cell_type <- "MG"
 
 SCE <- sce[,grep(cell_type, sce$Cluster)]
 SCE <- cbind(SCE, sce[,sce$Cluster == "Ctrl"])
@@ -226,7 +227,7 @@ library(pheatmap)
 t <- which(AVE > 8)
 AVE[t] <- 8
 
-pheatmap(AVE, color=viridis::viridis(500), cluster_cols=F, cluster_rows=F, drop_levels = T, fontsize = 7, border_color = NA, file = paste0(dirM, "Trem-Apoe-Fabp5.png"), scale="row", height=3, width = 3.5)
+pheatmap(AVE, color=viridis::viridis(500), cluster_cols=F, cluster_rows=F, drop_levels = T, fontsize = 7, border_color = NA, file = paste0(dirM, "Hif1a-Csrf1-Fabp5 MG.png"), scale="row", height=3, width = 3.5)
 ```
 
 # boxplots for the genes of interest
@@ -235,8 +236,8 @@ library(ggplot2)
 library(RColorBrewer)
 library(ggpubr)
 
-cell_type <- "MG"
-#SCE <- sce[,grep(cell_type, sce$Cluster)]
+cell_type <- "MC"
+SCE <- sce[,grep(cell_type, sce$Cluster)]
 #SCE <- cbind(SCE, sce[,sce$Cluster == "Ctrl"])
 
 # set the genes of interest
@@ -255,7 +256,7 @@ df <- data.frame(Logs=logs, x=x, colour=col)
 ggplot(data=df, aes(y=Logs, x=x, fill=colour)) + geom_boxplot() + ggtitle(i) + theme(plot.title=element_text(hjust=0.5)) + ylab("logounts") + xlab(NULL) + scale_fill_brewer(palette="Accent", direction=1) + theme(plot.title=element_text(hjust=0.5), legend.position="none") 
 
 
-ggsave(paste0(dirM,"boxplot_", i, ".png"), scale=1, height=3, width =2)
+#ggsave(paste0(dirM,"boxplot_", i, ".png"), scale=1, height=3, width =2)
 ```
 
 #homeostatic genes dot plot
@@ -288,12 +289,12 @@ cds <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNA
 ```
 
 ```{r}
-dirU <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/3. Small Clust Removed/"
 library(ggplot2)
+library("monocle3")
 cby =  "cluster"
 plot_cells(cds,
-           gene = "Apoe",
-           color_cells_by = cby,
+           gene = "Msr1",
+           color_cells_by = cby
            label_cell_groups=F,
            label_leaves=F,
            label_roots = F,
@@ -307,7 +308,7 @@ plot_cells(cds,
            labels_per_group=1
 )#+ scale_fill_manual(values=temp) + geom_point(aes(fill=colData(cds[0])[cby][,1]), pch=21, stroke = .0, alpha = 1, size=0.5) 
 #save the plot
-ggsave(paste0(dirU, cby, ".png"), scale = 0.5, width = 10, height = 8)
+ggsave(paste0(dirM, cby, " Msr1.png"), scale = 0.5, width = 10, height = 8)
 ```
 
 #Heatmap of DAMS by cluster
@@ -460,4 +461,22 @@ ggplot(data=df, aes(y=Logs, x=col, fill=x)) + geom_boxplot() + theme(plot.title=
 # save and size
 ggsave(paste0(dirF,"boxplot-MG2", i, ".png"), scale=1, height=2, width=7)
 
+```
+
+# hammond and milich cycling 
+```{r}
+library(scater)
+
+colnames(sce) <- make.unique(colnames(sce), sep = "X")
+
+list <- c("Hist1h2bc", "Birc5", "H2afx", "Ube2c", "Ccnb2", "Cenpa", "Stmn1", "Tuba1b", "Pclaf", "Hmgb2", 'Tubb5',"Ran", "Cks1b") #Hammond et al and Milich et al
+
+list[!(list %in% rownames(sce))]
+
+sceH <- sce[, grep("MG", sce$Cluster )]
+sceH <- cbind(sceH, sce[,sce$Cluster == "Ctrl"])
+#Generate and save the heatmap
+name <- "CHammond_Milich cycle"
+plotHeatmap(sceH, features=list, exprs_values="logcounts", cluster_cols=F, cluster_rows=T, columns=order(sceH$Cluster), 
+            zlim=c(0,3), colour_columns_by=c("cycl", "Cluster"), file=paste0(dirM, name,".png"), fontsize=5, show_rownames=T, center=F, symmetric=F, cellheight=5, cellwidth=0.02)
 ```
