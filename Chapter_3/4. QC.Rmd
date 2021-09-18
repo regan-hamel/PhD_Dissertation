@@ -10,23 +10,34 @@ output: html_document
 dirA <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/"
 
 # load the sce object
-sce <- readRDS(paste0(dirA, "/QC/preQC_sce.RDS"))
+sce <- readRDS(paste0(dirA, "/1. QC/preQC_sce.RDS"))
 sce$log10sum <- log10(sce$sum)
 sce$log10detected <- log10(sce$detected)
 ```
 
 #plot the QC metrics for all the samples
 ```{r}
-dir0 <- paste0(dirA, "QC/")
+dir0 <- paste0(dirA, "1. QC/")
 dir.create(dir0)
 
 stage = "PreQC, combined" #specify the stage for the plotting function
-source("/Users/reganhamel/Documents/PhD/scRNAseq Workflow/PhD_Dissertation/Chapter_3/Sources/Fxn - qcPlots.R", echo = TRUE)
+source("/Users/reganhamel/Documents/PhD/scRNAseq Workflow/PhD_Dissertation/Chapter_3/Sources/qcPlots.R", echo = TRUE)
 ```
 
+#rename levels
 ```{r}
 library(plyr)
-sce$stage <- revalue(sce$stage, c("HC"="Ctrl"))
+
+#save a copy of the old sample names
+sce$sampleID -> sce$sampleID_old
+
+#remove SIGA (common to all samples)
+sce$sampleID <- gsub("SIGA", "", sce$sampleID)
+
+#reorder by stsage
+sce$sampleID <- factor(sce$sampleID, levels = c("H9", "F3", "D10", "G11.D2", "F9","G9.D1","H11", "E11","F11","E3", "D3", "G9.D3", "E10", "F10", "G11.D21"))
+
+table(sce$sampleID)
 ```
 
 
@@ -43,7 +54,7 @@ path <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/1. 
 y <- "log10sum"
 sce$log10sum <- log10(sce$sum)
 sce$log10detected <- log10(sce$detected)
-c_by <- "stage"
+c_by <- 'subsets_Mito_percent' #"stage"
 #to plot coldata
 p <- plotColData(
   sce,
@@ -59,7 +70,7 @@ ggsave(paste0(path, y,  "-", c_by, "-pre QC.png"), scale=1.5, height=2.5, width 
 
 # SIGAH9 removed for low lib size/complexity and high mito
 ```{r}
-sce <- sce[,sce$sampleID != "SIGAH9"]
+sce <- sce[,sce$sampleID != "H9"]
 sce$sampleID <- droplevels(factor(sce$sampleID))
 ```
 
@@ -97,7 +108,7 @@ library(ggplot2)
 library(scater)
 
 #set the dir
-path <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/QC/violin plots/mt_rem_"
+path <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/1. QC/violin plots/mt_rem_"
 
 y <- "log10detected"
 c_by <- "version"
@@ -217,7 +228,7 @@ dev.off()
 
 #remove sample SIGAF3 (88 cells)
 ```{r}
-sce <- sce[,sce$sampleID != "SIGAF3"]
+sce <- sce[,sce$sampleID != "F3"]
 sce$sampleID <- droplevels(sce$sampleID)
 ```
 
