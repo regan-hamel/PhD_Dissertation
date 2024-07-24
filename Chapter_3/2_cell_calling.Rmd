@@ -1,0 +1,173 @@
+---
+title: "2. Cell Calling"
+author: "Regan"
+date: "29/01/2020"
+output: html_document
+---
+
+# Introduction
+
+This notebook will remove empty droplets from the unfiltered, barcode swapping-corrected gene-counts matrices. This method is now used by Cell Ranger, but at the time of this analysis, this had to be run separately.
+
+Based on:
+
+-   <https://genomebiology.biomedcentral.com/articles/10.1186/s13059-019-1662-y> (paper)
+
+-   <https://bioconductor.org/packages/release/bioc/manuals/DropletUtils/man/DropletUtils.pdf> (package documentation)
+
+# Setup
+
+## Load libraries
+
+```{r}
+suppressPackageStartupMessages({
+  library(DropletUtils)
+  library(scater)
+  library(dplyr)
+  library(EnsDb.Mmusculus.v79)
+  library(org.Mm.eg.db)
+  library(BiocParallel)
+})
+```
+
+### Load data
+
+```{r}
+# load directories, sample metadata, and the number of samples (n)
+source("source/metadata.R")
+
+# convert metadata to df
+metadata_names <- metadata[[1]]
+metadata <- metadata[-1]
+metadata <- do.call(rbind.data.frame, metadata)
+colnames(metadata) <- metadata_names
+  
+# set paths to raw samples
+paths <- file.path(dir0, sapply(metadata,"[[",1), "raw_feature_bc_matrix")
+
+# read 10x counts
+sce_all <- read10xCounts(paths, sample.names = sapply(metadata,"[[",1),
+                         col.names = TRUE)
+
+```
+
+# Remove empty drops
+
+-   Call Empty drops to identify cells as those with barcode patterns that differ from the ambient (free-floating RNA) patterns
+
+-   be sure to run by sample
+
+```{r}
+set.seed(100)
+
+#set the false discovery rate for the EmptyDrops function
+e <- 0.01
+
+sce_cells <- list()
+for (sample in levels(factor(sce_all$Sample))) {
+  
+  # subset the sce to a single sample
+  sce <- sce_all[, sce_all$Sample == sample]
+  
+  # add metadata
+  colData(sce) <- cbind(colData(sce), metadata[metadata$sampleID == sample,])
+  
+  dirI <- file.path(dir0, sample)
+  
+  #compute statistics for each cell barcode, including the rank (based on total UMI counts per cell), knee and inflection points, total number of counts per barcode, the fitted value
+  br.out <- barcodeRanks(counts(sce)) #input the count matrix from the sc
+  
+  # Generate and save the knee plot
+  pdf(paste0(dirI, sample," Empty Drops Knee Plot.pdf"))
+  plot(br.out$rank, br.out$total, log="xy", xlab="(log) Rank",
+       ylab="(log) Total UMI Counts per Barcode") 
+  o <- order(br.out$rank)
+  lines(br.out$rank[o], br.out$fitted[o], col="red")
+  abline(h=metadata(br.out)$knee, col="dodgerblue", lty=2)
+  abline(h=metadata(br.out)$inflection, col="forestgreen", lty=2)
+  legend("bottomleft", lty=2, col=c("dodgerblue", "forestgreen"),
+         legend=c("knee", "inflection"))
+  dev.off()
+  
+  
+  # Call Empty drops to identify cells as those with barcode patterns that differ from the ambient (loose, free-floating RNA) patterns
+  e.out <- emptyDrops(counts(sce))
+  sum(e.out$FDR <= e, na.rm=TRUE) #e is set in the loading chunk
+  
+  
+  # Calculate the number of cells (vs empty droplets)
+  is.cell <- e.out$FDR <= e
+  sum(is.cell, na.rm = TRUE)
+  table(Limited = e.out$Limited, Significant = is.cell)
+  
+  
+  # Generate and save the diagnostics plot, counts vs -log probability, to visualize potential empty drops vs cells
+  pdf(paste0(dirI,"Diagnostic Plots.pdf"))
+  plot(log10(e.out$Total), -e.out$LogProb, col = ifelse(is.cell, "red", "black"),
+       xlab="Log10 total UMI count", ylab = "-Log Probability",
+       xlim = c(x1 = 2, x2 = 4.5))
+  dev.off()
+  
+  
+  # Use the new filtered counts matrix from is.cell to create a filtered sce dataset
+  sce_cells[sample] <- sce[,which(e.out$FDR <= e)]
+  
+}
+```
+
+# Prep object
+
+-   Combine, add metadata, convert gene names, add QC metrics
+
+```{r}
+# Combine
+sce <- do.call(cbind, sce_cells)
+
+#Identify the chromosomal location for each gene. Mito location is used for downstream QC"
+rowData(sce)$ENSEMBL <- mapIds(org.Mm.eg.db, keytype="SYMBOL", 
+                               keys=rownames(sce), column="ENSEMBL")   
+rowData(sce)$ENSEMBL[is.na(rowData(sce)$ENSEMBL)] <- names(rowData(sce)$ENSEMBL)[is.na(rowData(sce)$ENSEMBL)]
+rowData(sce)$SYMBOL <- rownames(sce)
+rownames(sce) <- uniquifyFeatureNames(rownames(sce), rowData(sce)$SYMBOL)
+
+#Identify the chromosomal location for each gene. Ribo and mito location is used for downstream QC"
+location <- mapIds(EnsDb.Mmusculus.v79, keys=rowData(sce)$ENSEMBL, 
+                   column="SEQNAME", keytype="GENEID")
+rowData(sce)$CHR <- location
+summary(location == "MT")
+
+if (summary(location == "MT")["TRUE"] != 13) {
+  print("error in MT gene mapping")
+  stop()
+}
+
+#calculate QC metrics per cell
+qcstats <- perCellQCMetrics(sce, subsets=list(Mito=which(rowData(sce)$CHR =="MT"))) 
+colData(sce) = cbind(colData(sce), qcstats)
+
+# Compute size factors for normalization downstream
+clusters <- quickCluster(sce, use.ranks=FALSE, method = "igraph", min.size = 100) # must set min.size, otherwise it takes forever
+sce <- computeSumFactors(sce, min.mean=0.1, cluster=clusters, BPPARAM=SerialParam()) 
+```
+
+### Reorder metadata
+
+```{r}
+#order factors by time point
+
+sce$sampleID <- factor(sce$sampleID, levels = c("SIGAH9", "SIGAF3", "SIGAD10", "SIGAG11.D2", "SIGAF9","SIGAG9.D1","SIGAH11", "SIGAE11","SIGAF11","SIGAE3", "SIGAD3", "SIGAG9.D3", "SIGAE10", "SIGAF10", "SIGAG11.D21"))
+
+sce$stage <- factor(sce$stage, levels = c("HC", "1", "2", "3", "10", "21"))
+
+sce$date <- factor(sce$date, levels =c("10-Jan-19", "28-Mar-19", "9-Apr-19", "23-May-19","20-Jul-19"))
+
+#set the version chemistry
+sce$version <- 3
+sce[,sce$date == "10-Jan-19"]$version <- 2
+```
+
+# Save object
+
+```{r}
+saveRDS(sce, file = paste0(dir1, "/preQC_sce.RDS"))
+```
