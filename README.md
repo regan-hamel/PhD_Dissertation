@@ -40,8 +40,9 @@ In this PhD project, I employed single-cell RNA sequencing (scRNAseq) to deconvo
 
 ### Reproducibility
 
-To reproduce the figures in my PhD thesis, first download the raw count data from the GEO repository ([GSE159638](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE159638)). Load this data into a SingleCellExperiment object and then follow the notebooks provided in the repsoitory, starting at [Chapter_3](Chapter_3) and working your way through in order.
+To reproduce the figures in my PhD thesis, first download the raw count data from the GEO repository ([GSE159638](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE159638)). Load this data into a SingleCellExperiment object and then follow the notebooks provided in the repository, starting at [Chapter_3](Chapter_3) and working your way through in order.
 
+Unfortunately, at the time of writing this thesis, I was not familiar with/aware of the importance of package management tools. In a (minimal effort) attempt to remedy this, I have included the output of [sessionInfo()](session_info.txt). Needless to say, I know better now!
 
 
 ### Supplementary
