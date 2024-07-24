@@ -28,6 +28,8 @@
 ### About The Project
 This repository documents the code used for the analysis and figure generation of my PhD thesis. As the only bioinformatician in my PhD lab, this was unfortunately not a collaborative coding project. Luckily, I've since gained extensive experience in collaborative coding on proprietary projects!
 
+*Please note* I am in the process of refactoring this code to better reflect my capabilities. Check out the timestamps in this repo to see my latest work.
+
 
 
 ### Abstract 
