@@ -1,0 +1,84 @@
+---
+title: "1. Barcode Swapping"
+author: "Regan"
+date: "17/01/2020"
+output: html_document
+---
+
+# Introduction
+
+This notebook will remove the effects of barcode swapping and generate "cleaned" counts that are used in the next notebook
+
+Notes:
+
+-   because barcode swapping is a phenomenon that is observed at the stage of sequencing (i.e. on the patterned flowcells used by new Illumina sequencers [including the HiSeq4000 and NovaSeq]), this has to be performed by SLX-run
+
+-   the protocol of droplet-based sequencing techniques allow us to assume that it's impossible (essentially) for reads from two (or more) different samples to have the same cell barcode, UMI barcode, and the gene. So if they do, we can remove them
+
+-   swappedDrops() finds these "impossible" combinations and return a count matrix that does not contain them
+
+Based on: <https://www.nature.com/articles/s41467-018-05083-x>
+
+# Load in the h5 files for a given SLX
+
+-   molecule information files (h5 format) are an output of CellRanger for each sample
+
+# Setup
+
+## Load libraries
+
+```{r}
+suppressPackageStartupMessages({
+  library(DropletUtils)
+})
+```
+
+## Load data
+
+```{r}
+# load in a list of objects containing the sample IDs for each SLX file
+source("source/SLX_names.R")
+
+# set the directory for the h5 files
+dir0 <- "/Volumes/Regan/Backups/Dropbox Backups/Regan 15.1.20/SCI scRNA-seq Project/Cx3cr1 Data/Universal Workflow/Cell Ranger 3.1.0/Cell Ranger Data/"
+
+# update the SLX list with the full paths
+SLX_list <- lapply(SLX_list, function(SLX) file.path(dir0, SLX, "molecule_info.h5"))
+```
+
+## Helper function
+
+Write a function to load all the data from a given flow cell
+
+```{r}
+###############################################################################
+#' Run swappedDrops by flow cell
+#' @description Load data from a flow cell, run swapped drops
+#' @param h5_files paths to all the h5_files for the data on a given flow cell
+#' @importFrom DropletUtils swappedDrops
+#' 
+#' @author Regan
+###############################################################################
+
+run_swappedDrops <- function(h5_files) {
+  
+  # run swappedDrops
+  # note the authors do not recommend setting min.frac lower than 0.5
+  s.out <- DropletUtils::swappedDrops(h5_files, barcode.length = NULL, min.frac = 0.9,
+                                      get.swapped = TRUE, get.diagnostics = TRUE,
+                                      hdf5.out = TRUE)
+  
+  # write cleaned counts for each sample
+  for(sample in 1:length(SLX)) {
+    counts <- s.out$cleaned[[sample]]
+    write10xCounts(counts, path = file.path(dir0, SLX[sample], "cleaned_counts"))
+  }
+}
+```
+
+# Call swappedDrops
+
+```{r}
+set.seed(1000)
+lapply(SLX_list, run_swappedDrops)
+```
