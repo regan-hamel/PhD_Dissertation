@@ -19,10 +19,6 @@ Notes:
 
 Based on: <https://www.nature.com/articles/s41467-018-05083-x>
 
-# Load in the h5 files for a given SLX
-
--   molecule information files (h5 format) are an output of CellRanger for each sample
-
 # Setup
 
 ## Load libraries
@@ -33,7 +29,9 @@ suppressPackageStartupMessages({
 })
 ```
 
-## Load data
+## Prep h5 data paths
+
+Note: molecule information files (h5 format) are an output of CellRanger for each sample
 
 ```{r}
 # load in a list of objects containing the sample IDs for each SLX file
