@@ -138,3 +138,56 @@ prepG <- function(gene, sep = " ", match = NULL) {
   }
   return(input)
 }
+
+###############################################################################
+#' Perform QC on a sce object
+#' @description identify MT genes, calculate QC metrics,
+#' remove low quality cells based on set thresholds
+#' @param sce sce object to perform QC on
+#' @param IEGs the genes of interest
+#' @importFrom scuttle perFeatureQCMetrics
+#' @importFrom SummarizedExperiment rowData 
+#' @importFrom SingleCellExperiment logcounts
+#' @importFrom scater calculateQCMetrics
+#' @import EnsDb.Mmusculus.v79
+#' 
+#' @author Regan
+###############################################################################
+prepSCE <- function(sce, IEGs) {
+  # get the dataset name
+  name <- sce$name[1]
+  
+  # Identify the chromosomal location for each gene
+  rowData(sce)$CHR <- mapIds(EnsDb.Mmusculus.v79, keys = rownames(sce), 
+                             column = "SEQNAME", keytype = "SYMBOL")
+  
+  # Calculate QC metrics including the percent of counts from mitochondrial genes
+  sce <- perFeatureQCMetrics(sce,
+                             feature_controls = list(
+                               Mito = which(rowData(sce)$CHR =="MT"))
+  ) 
+  
+  # Remove low quality cells by UMI and gene counts thresholds and by percent
+  # of mitochondrial counts
+  by.Genes <- sce$total_features_by_counts > 1000
+  by.UMI <- sce$total_counts > 1000
+  gene.UMI.keep <- by.Genes & by.UMI 
+  sce <- sce[,gene.UMI.keep]
+  
+  # Identify and remove cells by high mitochondrial gene percent
+  mito <- sce$pct_counts_Mito > 5
+  sce.S <- sce[,!mito]
+  
+  # Calculate the percent of total genes from IEGs and save in a data frame
+  sce <- calculateQCMetrics(sce,
+                            feature_controls = list(IEGs = which(
+                              rownames(sce) %in% IEGs))
+  )
+  
+  df <- data.frame(sce$pct_counts_IEGs, rep(name, ncol(sce)),
+                   sce$pct_counts_Mito, sce$log10_total_counts)
+  
+  colnames(df) <- c("Pct", "Study", "Mito-preQC", "Logcounts-postQC")
+  
+  return(df)
+}

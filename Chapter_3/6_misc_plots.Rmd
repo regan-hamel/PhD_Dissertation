@@ -78,6 +78,7 @@ ggplot(data, aes(x = time, y = percentage, fill = group)) +
 ```
 
 # Histogram of cell type per cluster
+
 ```{r}
 # set the x and y values for the plot
 y <- sce$cell_type
@@ -111,7 +112,8 @@ ggplot(data, aes(fill = group, y = value, x = cluster)) +
 
 ### Pearson's residuals
 
-- http://www.sthda.com/english/wiki/chi-square-test-of-independence-in-r (how to interpret)
+-   <http://www.sthda.com/english/wiki/chi-square-test-of-independence-in-r> (how to interpret)
+
 ```{r}
 # Create table
 All <- table(sce$Cluster, sce$stage)
@@ -142,10 +144,10 @@ genes <- c("Ngp", "Ftl1", "Cd52", "Ctsb", "Timp2", "Mif", "Anxa5")
 bxplot(sce, x_name = "cell_type", genes = genes, colour = "cell_type") 
 ```
 
-
 # Heatmaps
 
 ### Miscellanious gene lists
+
 ```{r}
 ### set the cell type
 # input <- c("S100a9", "S100a8", "Retnlg", "Ifitm1", "Irg1", "Hdc", "Cxcr2", "Mxd1")
@@ -173,10 +175,10 @@ plotHeatmap(sce_hm, features = input, exprs_values = "logcounts",
             fontsize_row = 5, fontsize_col = 0.2, treeheight_col = 40)
 ```
 
-
 ### Non-myeloid cell genes
 
 Prep the cell type-specific gene lists
+
 ```{r}
 # load the gene lists for cell types collected from other scRNA-seq studies (see script for source articles)
 source("../gene_lists/NonM_RNA.R")
