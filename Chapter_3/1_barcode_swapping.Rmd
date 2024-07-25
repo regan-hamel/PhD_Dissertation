@@ -26,6 +26,7 @@ Based on: <https://www.nature.com/articles/s41467-018-05083-x>
 ```{r}
 suppressPackageStartupMessages({
   library(DropletUtils)
+  source("../utils/helper_functions.R")
 })
 ```
 
@@ -42,36 +43,6 @@ dir0 <- "/Volumes/Regan/Backups/Dropbox Backups/Regan 15.1.20/SCI scRNA-seq Proj
 
 # update the SLX list with the full paths
 SLX_list <- lapply(SLX_list, function(SLX) file.path(dir0, SLX, "molecule_info.h5"))
-```
-
-## Helper function
-
-Write a function to load all the data from a given flow cell
-
-```{r}
-###############################################################################
-#' Run swappedDrops by flow cell
-#' @description Load data from a flow cell, run swapped drops
-#' @param h5_files paths to all the h5_files for the data on a given flow cell
-#' @importFrom DropletUtils swappedDrops
-#' 
-#' @author Regan
-###############################################################################
-
-run_swappedDrops <- function(h5_files) {
-  
-  # run swappedDrops
-  # note the authors do not recommend setting min.frac lower than 0.5
-  s.out <- DropletUtils::swappedDrops(h5_files, barcode.length = NULL, min.frac = 0.9,
-                                      get.swapped = TRUE, get.diagnostics = TRUE,
-                                      hdf5.out = TRUE)
-  
-  # write cleaned counts for each sample
-  for(sample in 1:length(SLX)) {
-    counts <- s.out$cleaned[[sample]]
-    write10xCounts(counts, path = file.path(dir0, SLX[sample], "cleaned_counts"))
-  }
-}
 ```
 
 # Call swappedDrops

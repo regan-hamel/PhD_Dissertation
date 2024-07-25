@@ -145,6 +145,10 @@ if (summary(location == "MT")["TRUE"] != 13) {
 qcstats <- perCellQCMetrics(sce, subsets=list(Mito=which(rowData(sce)$CHR =="MT"))) 
 colData(sce) = cbind(colData(sce), qcstats)
 
+# add log scale
+sce$log10sum <- log10(sce$sum)
+sce$log10detected <- log10(sce$detected)
+
 # Compute size factors for normalization downstream
 clusters <- quickCluster(sce, use.ranks=FALSE, method = "igraph", min.size = 100) # must set min.size, otherwise it takes forever
 sce <- computeSumFactors(sce, min.mean=0.1, cluster=clusters, BPPARAM=SerialParam()) 
