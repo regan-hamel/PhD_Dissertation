@@ -2,7 +2,7 @@
 # Chapter 1: Introduction
 
 ### Chapter Introduction
-The introduction covers 4 main topics, Spinal Cord Injury, Animal Models, Single-Cell Transcriptomics, and the Dissertation Outline. See the link below.
+The introduction covers 4 main topics: Spinal Cord Injury, Animal Models, Single-Cell Transcriptomics, and the Dissertation Outline. See the link below.
 
 [![PhD Thesis][PhD-shield]][PhD-url]
 
