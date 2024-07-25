@@ -1,0 +1,375 @@
+---
+title: "3. QC"
+author: "Regan"
+date: "07/04/2021"
+output: html_document
+---
+
+# Introduction
+
+This notebook will perform quality control on all samples in line with best practices, as described here: <https://bioconductor.org/books/3.14/OSCA/>
+
+# Setup
+
+## Load libraries
+
+```{r}
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(RColorBrewer)
+  library(ggplot2)
+  library(scater)
+  library(edgeR)
+  library(scds)
+})
+```
+
+## Set the directory and load data
+```{r}
+# set the directory
+dirA <- "/Users/reganhamel/gitlab/PhD_Dissertation_data//"
+
+# load the sce object
+sce <- readRDS(file.path(dirA, "preQC_sce.RDS"))
+
+### reformat sampleID names
+# save a copy of the old sample names
+sce$sampleID -> sce$sampleID_old
+
+#remove SIGA (common to all samples)
+sce$sampleID <- gsub("SIGA", "", sce$sampleID)
+
+#reorder by stage
+sce$sampleID <- factor(sce$sampleID, levels = c("H9", "F3", "D10", "G11.D2",
+                                                "F9","G9.D1","H11", "E11","F11",
+                                                "E3", "D3", "G9.D3", "E10",
+                                                "F10", "G11.D21"))
+
+table(sce$sampleID)
+```
+
+## Add a plotting helper function
+```{r}
+###############################################################################
+#' Plot QC plots
+#' @description A wrapper around qplot to plot QC metrics with a standard
+#' format
+#' @param x,y data to plot on the x and y axes
+#' @param colour data to colour dots by
+#' @param col.high,col.low colour scale extremes
+#' @param cutoff x and y limit cutoff
+#' @param xlab,ylab x and y axes labels
+#' @param size size of dots
+#' @param col.label
+#' @param title plot title
+#' @importFrom ggplot2 qplot
+#' @seealso ggplot2
+#' 
+#' @author Regan
+###############################################################################
+qcplot <- function (x, y, data, colour, col.high = "yellow", col.low = "blue",
+                    cutoff = 600, xlab = NULL, ylab = NULL, size = I(0.3), col.label = NULL,
+                    title = NULL, ...) { 
+  
+  the_plot <- qplot(x, y,  data = data, colour = colour, size = size, ...) +
+    scale_colour_gradient(low = col.low,high = col.high) +
+    theme(panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.background = element_blank(),
+          axis.line = element_line(colour = "black")) +
+    xlab(xlab) + ylab(ylab) +
+    labs(colour = col.label) + ggtitle(title)
+  return (the_plot)
+}
+```
+
+# Plot the QC metrics
+
+### QC plots and distribution histograms
+
+```{r}
+stage = "PreQC, combined" #specify the stage for the plotting function
+cutoff <- 600
+
+# extract colunmn data
+data <- data.frame(colData(sce))
+
+# plot full size
+qcplot(data = data, x = data$sum, y = data$detected,
+       colour = data$subsets_Mito_percent, xlab = "UMI Counts",
+       ylab = "Gene Counts", col.label = "% Mito UMIs", title = stage)
+
+### zoom in
+qcplot(data = data, x = data$sum, y = data$detected,
+       colour = data$subsets_Mito_percent, xlab = "UMI Counts",
+       ylab = "Gene Counts", col.label = "% Mito UMIs", title = stage) +
+  ylim(c(0, 1.1*cutoff)) + xlim(c(0, 3*cutoff))
+
+### view distribution
+hist(log10(sce$sum), xlab="Log10-total UMI Counts", breaks=50, col="grey80",
+     ylab="Number of cells", main = "Number of Detected Transcripts per Cell")
+
+hist(log10(sce$detected), breaks=20, col="grey80",
+     xlab="Log10-total number of expressed Genes",
+     main = "Number of Detected Genes per Cell", ylab="Number of cells")
+
+hist(sce$subsets_Mito_percent, breaks=20, col="grey80",
+     xlab="Proportion of Reads That Are Mitochondrial Genes", 
+     ylab="Number of cells", main = "% Mitochondrial Genes per Cell")
+```
+
+
+
+### Library size and complexity by sample
+
+```{r}
+# set y and colour
+y <- "log10sum"
+c_by <- 'subsets_Mito_percent' #"stage"
+
+# plot
+plotColData(sce, y = y, x = "sampleID", colour_by = c_by) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) 
+```
+Notes:
+
+- H9 is a poor quality sample, see low lib size/complexity and high mito
+- F3 has only 88 cells
+
+### Remove low quality sample
+
+```{r}
+sce <- sce[, !sce$sampleID %in% c("H9", "F3")]
+sce$sampleID <- droplevels(factor(sce$sampleID))
+
+
+# review QC metrics after dropping H9
+qcplot(data = data, x = data$sum, y = data$detected,
+       colour = data$subsets_Mito_percent, xlab = "UMI Counts",
+       ylab = "Gene Counts", col.label = "% Mito UMIs", title = "F3/H9 removed")
+```
+
+### Remove cells based on high mito 
+
+```{r}
+rem.mito <- sce$subsets_Mito_percent > 5
+sce_mito <- sce[, rem.mito] #save the removed cells
+sce <- sce[, !rem.mito]
+
+# review QC metrics after dropping H9 and high mito
+qcplot(data = data, x = data$sum, y = data$detected,
+       colour = data$subsets_Mito_percent, xlab = "UMI Counts",
+       ylab = "Gene Counts", col.label = "% Mito UMIs", title = "F3/H9 & mito removed")
+```
+
+### Review QC metrics so far
+
+```{r}
+# set y and colour
+y <- "log10detected"
+c_by <- "version"
+
+# plot
+plotColData(sce, y = y, x = "sampleID", colour_by = c_by) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  geom_hline(yintercept = log10(600), colour = "black") +
+  geom_hline(yintercept = log10(450), colour = "blue")
+```
+
+### Remove cells based on UMI/uniquely detected genes
+
+Set thresholds by chemistry, as the sensitivity is different
+
+```{r}
+#for v3 chemistry
+rem.sum <- sce$sum < 1000
+rem.det <- sce$detected < 600
+discard <- rem.sum | rem.det
+
+sce1 <- sce[,sce$version == 3 & !discard]
+sce1_low <- sce[,sce$version == 3 & discard]
+
+#for v2 chemistry
+rem.sum <- sce$sum < 450
+rem.det <- sce$detected < 450
+discard2 <- rem.sum | rem.det
+
+sce2 <- sce[,sce$version == 2 & !discard2]
+sce2_low <- sce[,sce$version == 2 & discard2]
+
+#save only the high quality cells
+sce <- cbind(sce1, sce2)
+```
+
+### Review QC metrics post-QC (sanity check)
+
+```{r}
+# set y and colour
+y <- "log10detected"
+c_by <- "subsets_Mito_percent"
+
+# plot
+plotColData(sce, y = y, x = "sampleID", colour_by = c_by) + 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) +
+  geom_hline(yintercept = log10(600), colour = "black") +
+  geom_hline(yintercept = log10(450), colour = "blue")
+
+# review QC metrics after dropping low quality cells/samples
+qcplot(data = data, x = data$sum, y = data$detected,
+       colour = data$subsets_Mito_percent, xlab = "UMI Counts",
+       ylab = "Gene Counts", col.label = "% Mito UMIs", title = "post-QC")
+```
+
+### Cell type bias?
+
+Check to see if a certain cell type is being discarded with these thresholds
+
+```{r}
+discard <- cbind(sce_mito, sce1_low, sce2_low)
+remove <- calculateAverage(counts(discard))
+keep <- calculateAverage(counts(sce))
+
+
+logs <- cpm(cbind(remove, keep), log = T, prior.count = 2)
+logFC <- logs[,1] - logs[,2]
+ave_count <- rowMeans(logs)
+
+#highlight mito genes
+is.mito <- which(rowData(sce)$CHR =="MT")
+```
+
+
+Expected cell types (based on lineage tracing): 
+
+```{r}
+# expected cell types
+gene <- list(
+  Microglia = c("Olfml3","Sparc", "Trem2", "C1qa", "C1qb", "C1qc", "Ctss","Csf1r",
+                "Hexb","Gpr34", "P2ry12","Plxdc2", "Sall1", "Siglech","Cx3cr1",
+                "Tmem119","Serpine2", "Cst3"),
+  Mono_macro = c("Ccl7", "Ecm1", "Mgst1", "Arg1", "Ms4a7", "Fcer1g", "Gpnmb", "Ftl1",
+                 "Tyrobp", "Lgals3", "Lyz2", "Cyba", "Lgals3", "Tmsb4x", "Actb", "Fth1",
+                 "Ctsd", "Eef1a1", "Fau", "Rps8", "Rpl41", "Ctsb", "Rps29"),
+  Neutrophils = c("S100a8", "S100a9", "Lcn2", "Dedd2", "Ly6g"),
+  Dendritic_cells = c("Cd74", "H2-Eb1", "H2-Aa", "Flt3", "Zbtb46" ),
+  Activated_micro = c("Spp1", "Fabp5", "Apoe")
+)
+
+# set colour list
+col <- list(Microglia = "red", Mono_macro = "yellow", Neutrophils = "purple",
+            Dendritic_cells = "orange", Activated_micro = "green")
+
+# plot
+plot(ave_count, logFC, xlab = "Average UMI count",
+     ylab = "logFC (removed/kept)", pch = 18)
+
+for (i in 1:length(gene)) {
+  points(ave_count[gene[[i]]], logFC[gene[[i]]], col = col[[i]],
+         pch = 18
+  )
+}
+
+legend(x = "topright", legend = names(gene), col = sapply(col,"[[",1), pch = 18)
+```
+
+Unexpected cell types (based on lineage tracing): 
+
+```{r}
+# contaminating cell types
+gene <- list(
+  Neurons = c("Camk2n1", "Ckb", "Tubb2a", "Kif5b", "Tuba1a", "Chchd10",
+              "Slc25a4", "Cpe", "Clu", "Nefl", "Camk2n1", "Pcsk1n", "Prnp",
+              "Mt3"),
+  Astrocytes = c("Gfap", "Aldh1l1", "Slc1a3","Slc1a2", "Aqp4", "Atp1b2",
+                 "Atp1a2","Aldoc", "Ntsr2", "Lcn2", "Ttyh1", "Chchd10",
+                 "Ndrg2", "Mobp", "Atp1b2", "Bcas1", "Sdc4", "Mal", "Gpr37l1"),
+  Oligodendrocytes = c("Mbp", "Scd2", "Plp1", "Cnp", "Olig1", "Apod",
+                       "Plekhb1", "Cryab", "Cldn11", "Cldn11", "Gpm6b",
+                       "Ptgds"),
+  Endothelial_cells = c("Hspb1", "Sparcl1", "Sparc", "S100a16"),
+  Mito_genes = rownames(sce)[is.mito]
+)
+
+col <- list(Neurons = "red", Astrocytes = "yellow",
+            Oligodendrocytes = "purple", Endothelial_cells = "orange",
+            Mito_genes = "blue")
+
+# plot
+plot(ave_count, logFC, xlab = "Average UMI count",
+     ylab = "logFC (removed/kept)", pch = 18)
+
+for (i in 1:length(gene)) {
+  points(ave_count[gene[[i]]], logFC[gene[[i]]], col = col[[i]],
+         pch = 18
+  )
+}
+
+legend(x = "topright", legend = names(gene), col = sapply(col,"[[",1), pch = 18)
+```
+
+# Doublet detection
+
+Identify doublets in the post-QC dataset - this must be done by sample
+
+```{r}
+doublet <- NULL
+doublet_score <- NULL
+#identify doubles for each sample
+for (i in levels(factor(sce$sampleID))) {
+  SCE <- sce[,sce$sampleID == i]
+  SCE <- cxds_bcds_hybrid(SCE, estNdbl=TRUE)
+  doublet <- c(doublet, SCE$hybrid_call) #label now and remove later
+  doublet_score <- c(doublet_score, SCE$hybrid_score) #label now and remove later
+  
+}
+
+sce$doublet <- doublet
+sce$doublet_score <- doublet_score
+
+# Save the updated sce for each sample for downstream analysis
+saveRDS(sce, paste0(dirA, "sce_dbl_marked.RDS"))
+```
+
+
+### Visualise doublet scores
+
+```{r}
+data <- data.frame(x = log10(sce$sum), y = log10(sce$detected), colour = sce$doublet)
+
+qcplot(data = data, x = data$sum, y = data$detected,
+       colour = data$doublet, xlab = "UMI Counts",
+       ylab = "Gene Counts", col.label = "Doublet score", title = "post-QC") +
+  geom_hline(yintercept = 5, colour = "black")
+
+```
+
+### Remove doublets
+
+```{r}
+sce <- sce[,!sce$doublet]
+saveRDS(sce, paste0(dirA, "sce.RDS"))
+```
+
+# Calculate table data
+
+### Record removed cells
+
+```{r}
+#print the cells removed
+list <- list(
+  table(discard),
+  table(discard2),
+  table(rem.mito),
+  table(doublet),
+  summary(discard | discard2 | rem.mito | doublet))
+
+capture.output(print(list), file = paste0(dirA, "/removed.csv"))
+```
+
+### Calculate median genes per cell
+
+```{r}
+tibble(sampleID = sce$sampleID, detected = sce$detected) %>%
+  group_by(sampleID) %>%
+  summarise(median = median(detected))
+```

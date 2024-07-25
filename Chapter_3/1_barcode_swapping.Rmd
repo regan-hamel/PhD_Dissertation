@@ -54,6 +54,7 @@ Write a function to load all the data from a given flow cell
 #' @description Load data from a flow cell, run swapped drops
 #' @param h5_files paths to all the h5_files for the data on a given flow cell
 #' @importFrom DropletUtils swappedDrops
+#' @seealso DropletUtils
 #' 
 #' @author Regan
 ###############################################################################
