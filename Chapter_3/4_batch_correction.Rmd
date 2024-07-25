@@ -90,7 +90,7 @@ str(chosen_hvgs)
 
 ```{r}
 HVG <- rownames(sce[chosen_hvgs,])
-saveRDS(HVG, file = paste0(dirBC,"HVG.RDS"))
+metadata(sce)$hvg <- HVG
 ```
 
 ### Visualise the top HVGs

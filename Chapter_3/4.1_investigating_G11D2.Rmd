@@ -1,0 +1,224 @@
+---
+title: "Investigating Batch effects in samples G11 and D2"
+author: "Regan"
+date: "01/04/2020"
+output: html_document
+---
+
+# Introduction
+
+This notebook will investigate the need for batch correction in day 1 samples
+
+# Setup
+
+## Load libraries
+
+```{r}
+suppressPackageStartupMessages({
+  library(scater)
+  library(RColorBrewer)
+  library(ggplot2)
+  library(scran)
+  library(BiocSingular)
+})
+```
+
+## Set the directory and load data
+
+```{r}
+# set path
+dirH <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/2. BC/HC DEGs/"
+
+# load data
+sceH_all <- readRDS("/Users/reganhamel/gitlab/PhD_Dissertation_data/sce.RDS")
+
+# make column names unique
+colnames(sceH_all) <- paste(colnames(sceH_all), sceH_all$sampleID, sep = "_")
+
+# subset
+sceH <- sceH_all[, sceH$stage == "HC"  | sceH_all$stage == "1" | sceH_all$stage == "2"]
+
+```
+
+# Investigate batch effect
+
+### Prepare the gene lists
+
+```{r}
+cyclMG <- c("Hist1h2bc", "Birc5", "H2afx", "Ube2c", "Ccnb2", "Cenpa", "Stmn1",
+            "Tuba1b", "Pclaf", "Hmgb2", 'Tubb5',"Ran", "Cks1b") #barres and Milich et al
+aMG <- c("Ccl2", "Apoe", "Spp1", "Ctsb", "Lgals3", "Ftl1", "Fth1", "Fabp5",
+         "Lyz2", "Mif", "Ms4a6c", "Ccl4")
+hMG <- c("P2ry12", "Tmem119","Plxdc2", "Siglech", "Olfml3", "Sparc")
+CAMS <- c("Mrc1", "Pf4", "Ms4a7", "Stab1", "Cbr2", "Cd36")
+
+genes <- c(hMG, cyclMG, aMG, CAMS)
+
+# check that they're all in the rownames
+genes[!(genes %in% rownames(sceH))]
+```
+
+### Generate and save the heatmap
+
+```{r}
+name <- "CtlvAcute short_w_Milich"
+
+plotHeatmap(sceH, features = genes, exprs_values="logcounts",
+            cluster_cols = FALSE, cluster_rows = FALSE,
+            columns = order(sceH$sampleID),
+            colour_columns_by = c("sampleID", "stage"), fontsize = 5,
+            show_rownames = TRUE, center = TRUE, symmetric = FALSE,
+            scale = FALSE, cellheight = 5, cellwidth = 0.035) # remove column?
+```
+
+### Boxplot of activated genes
+
+By sample to demonstrate that SIGAG11.D2 is activated
+
+#### Helper function
+
+```{r}
+###############################################################################
+#' Boxplots
+#' @description Boxplots for genes of interest
+#' @param sce sce object
+#' @param x_name column data to plot on the x axis 
+#' @param genes genes to plot
+#' @param colour level to colour the boxplots on, ie, splitting xaxis values
+#' into groups
+#' @author Regan
+###############################################################################
+
+bxplot <- function(sce, x_name, genes, colour, plot_legend = TRUE) {
+  
+  x <- colData(sce)[, x_name]
+  col <- colData(sce)[, colour]
+  
+  plist <- list()
+  for (gene in genes) {
+    
+    if (gene %in% rownames(sce)) {
+      logs <- as.numeric(logcounts(sce[gene]))
+    } else {
+      logs <- as.numeric(colData(sce)[, gene])
+    }
+    
+    # create dataframe
+    df <- data.frame(Logs = logs, x = x, colour = col)
+    
+    # keep colour legend if more than one level
+    if (nlevels(factor(col)) == 1 | isFALSE(plot_legend)) {
+      legend <- theme(legend.position="none") 
+    } else {
+      legend <- NULL
+    }
+    
+    plist[[gene]] <- ggplot(data = df, aes(y = Logs, x = x, fill = col)) +
+      geom_boxplot() + ggtitle(gene) + 
+      legend +
+      theme(plot.title = element_text(hjust = 0.5),
+            axis.text.x = element_text(angle = 45, hjust = 1)) +
+      ylab("logcounts") + xlab(x_name) +
+      scale_fill_manual(values = c("lightblue", brewer.pal(11,"RdYlGn"),"#003319",
+                                   "black", "grey50", "grey50")) 
+  }
+  return(plist)
+}
+```
+
+```{r}
+genes <- c("P2ry12", "Spp1", "Mki67", "Stmn1", "Cfl1", "Birc5", "Cd36")
+
+bxplot(sceH, x_name = "sampleID", genes = genes, colour = "stage") 
+```
+
+# Investigate Ctrl only
+
+### Subset and normalise
+
+```{r}
+sceH <- sceH_all[, sceH_all$condition == "HC"]
+
+subset <- "date" #all cells from a given flow cell lane will be combined into a single sce and will be batch corrected only to cells from other flow cell lanes
+sceH$subset <- droplevels(factor(colData(sceH)[subset][,1]))
+
+sceH <- batchelor::multiBatchNorm(sceH, batch = sceH$subset) #size factors are stored in sce
+```
+
+### Batch correct HCs
+
+```{r}
+# Model the variance
+set.seed(100)
+dec <- modelGeneVar(sceH, block = sceH$subset)
+
+# Select the HVGs with +ve biological components to use downstream
+chosen_hvgs <- getTopHVGs(dec, prop = 0.2)
+str(chosen_hvgs)
+
+sce_BC_R<- batchelor::fastMNN(sceH,
+                              batch=sceH$subset,
+                              subset.row = chosen_hvgs,
+                              k = 20,#number of nearest neighbours considered 
+                              d = 50,#number of pcs used 
+                              auto.merge = TRUE, #the order of merging is important. Set to auto or order by most heterogeneity, if known
+                              BSPARAM = IrlbaParam(deferred=TRUE), #set parallelization
+                              correct.all = FALSE #set correct.all=T otherwise it only corrects chosen.hvg values
+)
+
+# Restore old column data and assays
+colData(sce_BC_R) <- colData(sce)
+counts(sce_BC_R) <- counts(sce)[HVG,]
+logcounts(sce_BC_R) <- logcounts(sce)[HVG,]
+sizeFactors(sce_BC_R) <- sizeFactors(sce)
+
+# recalculate umap
+set.seed(100)
+sce_BC_R <- runUMAP(sce_BC_R, dimred="corrected")
+
+# Save hvgs in metadata
+metadata(sce_BC_R)$hvg <- chosen_hvgs
+```
+
+### Cluster
+
+```{r}
+set.seed(100)
+
+metadata(sce_BC_R)$k <- 10
+
+# Generate the shared nearest neighbour graph
+# The larger k (# of nn), the fewer the clusters, 20 is the default in Seurat, 10 in scran
+# Lower k means the noise will have a greater impact on the clustering.
+# Larger values are computationally expensive (k=20 takes 2 mins, k=30 takes 10)
+snn.gr <- buildSNNGraph(sce_BC_R, use.dimred="corrected",
+                        k = metadata(sce_BC_R)$k) #k ranges from 5-100
+
+#apply the louvain commuinity detectiono
+clusters <- igraph::cluster_louvain(snn.gr) #longer random walks will lead to fewer communities
+
+#store the clusters in the sce object column-based metadata
+sce_BC_R$Cluster <- factor(clusters$membership)
+
+# plot
+col_by <- "Cluster"
+plotUMAP(sce_BC_R, colour_by=col_by) #+ scale_fill_manual(values = c("#ABD9E9", "#542788"), aesthetics = "fill")
+
+```
+
+### Remove low quality clusters
+
+```{r}
+remove <- sce_BC_R$Cluster == 1 | sce_BC_R$Cluster == 4 | sce_BC_R$Cluster == 5 | sce_BC_R$Cluster == 6 | sce_BC_R$Cluster == 7
+
+#get the cell barcodes
+names <- colnames(sce_BC_R[,remove])
+sce_full <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/sce_UMAP_noBC.RDS")
+
+# get the index in the full sce
+names_rem <- (colnames(sce_full) %in% names)
+
+# remove and save filtered object
+sce <- sce_full[,!names_rem]
+saveRDS(sce, "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/BC/sce_UMAP_noBC_Ctrl_filt.RDS")
+```

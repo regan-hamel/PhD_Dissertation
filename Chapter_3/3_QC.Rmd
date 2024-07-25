@@ -28,7 +28,7 @@ suppressPackageStartupMessages({
 
 ```{r}
 # set the directory
-dirA <- "/Users/reganhamel/gitlab/PhD_Dissertation_data//"
+dirA <- "/Users/reganhamel/gitlab/PhD_Dissertation_data/"
 
 # load the sce object
 sce <- readRDS(file.path(dirA, "preQC_sce.RDS"))

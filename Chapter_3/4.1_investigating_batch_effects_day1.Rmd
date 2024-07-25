@@ -1,0 +1,137 @@
+---
+title: "Investigating Batch effects at day 1"
+author: "Regan"
+date: "01/04/2020"
+output: html_document
+---
+
+# Introduction
+
+This notebook will investigate the need for batch correction in day 1 samples
+
+# Setup
+
+## Load libraries
+
+```{r}
+suppressPackageStartupMessages({
+  library(scater)
+  library(scran)
+  library(ggplot2)
+  library(dplyr)
+})
+```
+
+## Set the directory and load data
+
+```{r}
+# set path
+dirK <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/2.1 kBET/"
+
+# load in two D2 replicates
+sce.all <- readRDS("/Users/reganhamel/gitlab/PhD_Dissertation_data/sce.RDS")
+
+HVG <- metadata(sce.all)$hvg
+
+sceK <- sce.all[,sce.all$sampleID  == "SIGAF9" |
+                  sce.all$sampleID ==  "SIGAG9.D1" |
+                  sce.all$sampleID ==  "SIGAH11"]
+
+# drop levels
+sceK$date <- droplevels(sceK$date)
+sceK$sampleID <- droplevels(sceK$sampleID)
+table(sceK$stage, sceK$date)
+table(sceK$sampleID, sceK$date)
+
+# preview
+sceK
+```
+
+# Investigate batch effect
+
+### Calculate PCAs
+
+```{r}
+set.seed(100)
+sceK <- runPCA(sceK, subset_row = HVG, BSPARAM = BiocSingular::RandomParam())
+```
+
+### Quick cluster
+
+Compare across samples
+
+```{r}
+snn.gr <- buildSNNGraph(sceK, use.dimred="PCA")
+clusters <- igraph::cluster_walktrap(snn.gr)
+sceK$Cluster <- factor(clusters$membership)
+
+sub <- sceK$Cluster != 1 & sceK$Cluster != 7 & sceK$Cluster != 8 & sceK$Cluster != 10
+sceK$sampleID <- revalue(sceK$sampleID,
+                         c("SIGAF9" = "F9", "SIGAG9.D1" = 'G9',
+                           "SIGAH11" = "H11"))
+
+(table(droplevels(sceK$Cluster[sub]),
+       droplevels(sceK$sampleID[sub])))/rowSums(table(droplevels(sceK$Cluster[sub]),
+                                                      droplevels(sceK$sampleID[sub])))*100
+```
+
+### Histogram of cell type per cluster
+
+```{r}
+sub <- sceK$Cluster != 1 & sceK$Cluster != 7 & sceK$Cluster != 8 & sceK$Cluster != 10
+
+# set the x and y values for the plot
+y <- droplevels(sceK$sampleID[sub])
+x <- droplevels(factor(sceK$Cluster[sub]))
+
+# create the df containing the x and y values
+df <- as.data.frame(table(y, x))
+colnames(df) <- c("y", "x", "Freq")
+
+# create data
+cluster <- as.numeric(levels(df$x)[df$x]) # x Axis
+value <- as.numeric(df$Freq)              # y Axis
+group <- df$y                             # group, one shape per group
+data <- data.frame(cluster, value, group)
+
+
+# plot
+data <- data  %>%
+  group_by(cluster, group) %>%
+  summarise(n = sum(value)) %>%
+  mutate(percentage = n / sum(n))
+
+ggplot(data, aes(fill=group, y=value, x=cluster)) + 
+  geom_bar(position="stack", stat="identity") +
+  ylab("Number of Cells") + xlab("Cluster")  + 
+  scale_x_discrete(limits=c(2:6,9)) +
+  scale_fill_manual(values=c("#A6CEE3", "#FDBF6F", "#B2DF8A")) 
+```
+
+### UMAP
+
+```{r}
+scet <- sceK[, sceK@int_colData@listData[["reducedDims"]]@listData[["UMAP"]][,1] > 4 &
+               sceK@int_colData@listData[["reducedDims"]]@listData[["UMAP"]][,2] < 0 &
+               sceK@int_colData@listData[["reducedDims"]]@listData[["UMAP"]][,2] > -7]
+
+plotUMAP(scet, colour_by = "sampleID", shape_by = "batch") 
+```
+
+### UMAP w grey
+
+```{r}
+scet <- sceK[, sceK@int_colData@listData[["reducedDims"]]@listData[["UMAP"]][,1] > -5 &
+               sceK@int_colData@listData[["reducedDims"]]@listData[["UMAP"]][,1] < 3 &
+               sceK@int_colData@listData[["reducedDims"]]@listData[["UMAP"]][,2] > 0]
+
+# rename levels to include NA for those not of interest
+scet$grey <- scet$sampleID 
+scet$grey[scet$grey  != "SIGAF9" & scet$grey != "SIGAG9.D1" & scet$grey != "SIGAH11"] <- NA
+
+# plot
+plotUMAP(scet, colour_by="grey") +
+  scale_fill_manual(values = c("#A6CEE3", "#FDBF6F", "#B2DF8A"),
+                    aesthetics = "fill", na.value = "grey90") +
+  theme(plot.title = element_text(size = rel(2)))
+```
