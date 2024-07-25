@@ -1,0 +1,50 @@
+---
+title: "ReducedDim Figs"
+author: "Regan"
+date: "29/05/2021"
+output: html_document
+---
+
+# Introduction
+
+This notebook generates the reduced dimension plots that are used to introduce these concepts in chapter 1
+
+# Setup
+
+### Load libraries
+
+```{r}
+suppressPackageStartupMessages({
+  library(scater)
+})
+```
+
+### Load the data
+
+```{r}
+# load the dataset used for the example
+sceA <- readRDS("/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 5/scRNAseq/4. MG4 removed/sce.RDS")
+
+# subset to a smaller sample to reduce computing load
+sce <- sceA[,sceA$strain == "Cre" & sceA$stage == "3"]
+```
+
+# Plot
+
+### PCA
+
+```{r}
+plotPCA(sce, colour_by = "cell_type")
+```
+
+### UMAP
+
+```{r}
+plotUMAP(sce, colour_by = "cell_type")
+```
+
+### Diffusion Map
+
+```{r}
+plotDiffusionMap(sce, colour_by = "cell_type")
+```
