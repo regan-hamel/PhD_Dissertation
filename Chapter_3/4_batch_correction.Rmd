@@ -1,0 +1,214 @@
+---
+title: "Batch Correction"
+author: "Regan"
+date: "01/04/2020"
+output: html_document
+---
+
+# Introduction
+
+This notebook normalises the samples, selects HVGs, and performs batch correction.
+
+Based on: Haghverdi, L., A. T. L. Lun, M. D. Morgan, and J. C. Marioni. 2018. "Batch effects in single-cell RNA-sequencing data are corrected by matching mutual nearest neighbors." Nat. Biotechnol. 36 (5): 421--27.
+
+# Setup
+
+### Load libraries
+
+```{r}
+suppressPackageStartupMessages({
+  library(scater)
+  library(batchelor)
+  library(scran)
+  library(BiocSingular)
+  library(dplyr)
+})
+```
+
+### Set the directory and load data
+
+```{r}
+# Assign the directory for batch correction files
+dirBC <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/2. BC/"
+
+# Load the sce containing all samples 
+sce <- readRDS("/Users/reganhamel/gitlab/PhD_Dissertation_data/sce.RDS")
+```
+
+# Normalise
+
+Perform scaling normalization within each batch for comparison between batches, regardless of the depth of coverage. Size factors are re-scaled using median-based normalisation using the ratio of average counts between batches. i.e. size factors in high-coverage batches are scaled down.
+
+```{r}
+#set the subset for normalisation, normalise by date except for the three
+# samples that had a second round of sequencing
+sce$batch <- sce$SLX
+
+# denote samples with unique SLX combos
+b <- c( "SIGAG11.D2", "SIGAD10", "SIGAG9.D3")
+for (i in b) {
+  sce$batch[sce$sampleID == i] <- i
+}
+
+sce <- batchelor::multiBatchNorm(sce, batch = sce$batch) #size factors are stored in sce
+```
+
+# Model the variance
+
+```{r}
+set.seed(100)
+dec <- modelGeneVar(sce, block = sce$batch)
+
+#check out the top HVGs
+head(dec[order(dec$bio, decreasing = TRUE),1:6])
+```
+
+### Plot the trend
+
+Visualising the biological vs technical variance
+
+```{r}
+gene <- "Spp1"
+for (i in colnames(dec$per.block)) {
+  current <- dec$per.block[[i]]
+  plot(current$mean, current$total, pch=18,  ylab = "Variance of log-Expression", xlab = "Mean log-Expression", main = i)
+  curve(metadata(current)$trend(x), add = TRUE, col="dodgerblue")
+  text(current$mean[gene], current$total[gene], labels = gene) 
+}
+```
+
+### Select the HVGs
+
+Those with +ve biological components to use downstream
+
+```{r}
+chosen_hvgs <- getTopHVGs(dec, prop = 0.2)
+str(chosen_hvgs)
+```
+
+### Save a record of the HVGs
+
+```{r}
+HVG <- rownames(sce[chosen_hvgs,])
+saveRDS(HVG, file = paste0(dirBC,"HVG.RDS"))
+```
+
+### Visualise the top HVGs
+
+```{r}
+top <- dec[order(dec$bio, decreasing = TRUE), 1:6][1:5,]
+
+plotExpression(sce, features = rownames(top), colour_by = "stage")
+```
+
+# Reduce dimensions
+
+For visualization via UMAP Note: these are not the UMAP parameters used for the Figures
+
+```{r}
+set.seed(100)
+sce <- runUMAP(sce, subset_row = HVG)
+
+# Save the sce
+saveRDS(sce, file = file.path(dirBC, "sce_UMAP_noBC_Ctrl_filt.RDS"))
+```
+
+# Visualize
+
+Look at the batch corrected dataset via UMAP by cluster and percent of counts from mitochondrial genes
+
+```{r}
+colour_by <- c("sampleID", "date", "SLX", "P2ry12", "Fabp5", "Ms4a7", "subsets_Mito_percent", "log10sum")
+
+lapply(colour_by, plotReducedDim, object = sce, dimred = "UMAP",
+       ncomponents = 2, percentVar = NULL)
+
+# rename levels to include NA for those not of interest
+sce$grey <- sce$sampleID 
+sce$grey[sce$stage  != 3 & sce$stage !=  "2"] <- NA
+
+#plot
+plotUMAP(sce, colour_by="grey") +
+  scale_fill_manual(values = c("#D53E4F", "#542788", "#5AB4AC", "#A1D76A",
+                               "#F1A340", "#FFEDA0"),
+                    aesthetics = "fill", na.value = "grey90") +
+  theme(plot.title = element_text(size = rel(2)))
+```
+
+# Batch Correct
+
+### Perform the batch correction
+
+```{r}
+set.seed(101)
+# Select a subset to base the level of batch correct on
+# all cells from a given collection date lane will be combined into a single sce
+# and will be batch corrected only to cells from other collection date lanes
+subset <- "date" 
+
+#set the subset for BC
+sce$subset <- droplevels(factor(colData(sce)[subset][,1]))
+
+# batch correct
+sce_BC <- batchelor::fastMNN(sce,
+                             batch = sce$subset,
+                             subset.row = rownames(sce[chosen_hvgs,]),
+                             k = 20,#number of nearest neighbours considered 
+                             d = 50,#number of pcs used 
+                             merge.order = c(4, 5, 1, 3, 2), #merge with most diverse sample first
+                             #auto.merge=T, #the order of merging is important. Set to auto or order by most heterogeneity, if known
+                             BSPARAM = IrlbaParam(deferred=TRUE), #set parallelization
+                             correct.all = FALSE #set correct.all=T otherwise it only corrects chosen.hvg values
+)
+```
+
+### Restore old column data and assays
+
+```{r}
+colData(sce_BC) <- colData(sce)
+counts(sce_BC) <- counts(sce)[HVG,]
+logcounts(sce_BC) <- logcounts(sce)[HVG,]
+sizeFactors(sce_BC) <- sizeFactors(sce)
+```
+
+### Reduce dimensions for visualization via UMAP
+
+Note: these are not the UMAP parameters used for the Figures
+
+```{r}
+set.seed(100)
+sce_BC <- runUMAP(sce_BC, dimred="corrected")
+```
+
+### Save the corrected sce
+
+```{r}
+saveRDS(sce_BC, file=paste0(dirBC, "sce_postBC.RDS"))
+```
+
+### Visualize the batch corrected dataset via UMAP by cluster and percent of counts from mitochondrial genes
+
+```{r}
+colour_by <- c("sampleID", "date", "SLX", "P2ry12", "Fabp5", "Ms4a7", "subsets_Mito_percent", "log10sum")
+
+lapply(colour_by, plotReducedDim, object = sce_BC, dimred = "UMAP",
+       ncomponents = 2, percentVar = NULL)
+
+
+# rename levels to include NA for those not of interest
+sce_BC$grey <- sce_BC$sampleID 
+sce_BC$grey[sce_BC$grey  != "SIGAF9" & sce_BC$grey !=  "SIGAG9.D1" & sce_BC$grey !=  "SIGAH11"] <- NA
+
+#p lot
+plotUMAP(sce_BC, colour_by="grey") +
+  scale_fill_manual(values=c("#A6CEE3", "#FDBF6F", "#B2DF8A"),
+                    aesthetics = "fill", na.value = "grey90") +
+  theme(plot.title = element_text(size = rel(2)))
+
+```
+
+### Check the variance lost
+
+```{r}
+metadata(sce_BC)$merge.info$lost.var *100
+```

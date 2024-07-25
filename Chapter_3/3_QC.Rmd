@@ -25,6 +25,7 @@ suppressPackageStartupMessages({
 ```
 
 ## Set the directory and load data
+
 ```{r}
 # set the directory
 dirA <- "/Users/reganhamel/gitlab/PhD_Dissertation_data//"
@@ -49,6 +50,7 @@ table(sce$sampleID)
 ```
 
 ## Add a plotting helper function
+
 ```{r}
 ###############################################################################
 #' Plot QC plots
@@ -118,8 +120,6 @@ hist(sce$subsets_Mito_percent, breaks=20, col="grey80",
      ylab="Number of cells", main = "% Mitochondrial Genes per Cell")
 ```
 
-
-
 ### Library size and complexity by sample
 
 ```{r}
@@ -131,10 +131,11 @@ c_by <- 'subsets_Mito_percent' #"stage"
 plotColData(sce, y = y, x = "sampleID", colour_by = c_by) + 
   theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) 
 ```
+
 Notes:
 
-- H9 is a poor quality sample, see low lib size/complexity and high mito
-- F3 has only 88 cells
+-   H9 is a poor quality sample, see low lib size/complexity and high mito
+-   F3 has only 88 cells
 
 ### Remove low quality sample
 
@@ -149,7 +150,7 @@ qcplot(data = data, x = data$sum, y = data$detected,
        ylab = "Gene Counts", col.label = "% Mito UMIs", title = "F3/H9 removed")
 ```
 
-### Remove cells based on high mito 
+### Remove cells based on high mito
 
 ```{r}
 rem.mito <- sce$subsets_Mito_percent > 5
@@ -238,8 +239,7 @@ ave_count <- rowMeans(logs)
 is.mito <- which(rowData(sce)$CHR =="MT")
 ```
 
-
-Expected cell types (based on lineage tracing): 
+Expected cell types (based on lineage tracing):
 
 ```{r}
 # expected cell types
@@ -272,7 +272,7 @@ for (i in 1:length(gene)) {
 legend(x = "topright", legend = names(gene), col = sapply(col,"[[",1), pch = 18)
 ```
 
-Unexpected cell types (based on lineage tracing): 
+Unexpected cell types (based on lineage tracing):
 
 ```{r}
 # contaminating cell types
@@ -329,7 +329,6 @@ sce$doublet_score <- doublet_score
 # Save the updated sce for each sample for downstream analysis
 saveRDS(sce, paste0(dirA, "sce_dbl_marked.RDS"))
 ```
-
 
 ### Visualise doublet scores
 
