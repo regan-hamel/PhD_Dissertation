@@ -21,6 +21,7 @@ suppressPackageStartupMessages({
   library(scater)
   library(edgeR)
   library(scds)
+  source("../utils/helper_functions.R")
 })
 ```
 
@@ -47,42 +48,6 @@ sce$sampleID <- factor(sce$sampleID, levels = c("H9", "F3", "D10", "G11.D2",
                                                 "F10", "G11.D21"))
 
 table(sce$sampleID)
-```
-
-## Add a plotting helper function
-
-```{r}
-###############################################################################
-#' Plot QC plots
-#' @description A wrapper around qplot to plot QC metrics with a standard
-#' format
-#' @param x,y data to plot on the x and y axes
-#' @param colour data to colour dots by
-#' @param col.high,col.low colour scale extremes
-#' @param cutoff x and y limit cutoff
-#' @param xlab,ylab x and y axes labels
-#' @param size size of dots
-#' @param col.label
-#' @param title plot title
-#' @importFrom ggplot2 qplot
-#' @seealso ggplot2
-#' 
-#' @author Regan
-###############################################################################
-qcplot <- function (x, y, data, colour, col.high = "yellow", col.low = "blue",
-                    cutoff = 600, xlab = NULL, ylab = NULL, size = I(0.3), col.label = NULL,
-                    title = NULL, ...) { 
-  
-  the_plot <- qplot(x, y,  data = data, colour = colour, size = size, ...) +
-    scale_colour_gradient(low = col.low,high = col.high) +
-    theme(panel.grid.major = element_blank(),
-          panel.grid.minor = element_blank(),
-          panel.background = element_blank(),
-          axis.line = element_line(colour = "black")) +
-    xlab(xlab) + ylab(ylab) +
-    labs(colour = col.label) + ggtitle(title)
-  return (the_plot)
-}
 ```
 
 # Plot the QC metrics

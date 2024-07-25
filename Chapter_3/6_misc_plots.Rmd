@@ -1,0 +1,242 @@
+---
+title: "8. Misc Plots"
+author: "Regan"
+date: "30/06/2021"
+output: html_document
+---
+
+# Introduction
+
+This notebook generates the area composition plot, cell type vs time point plot
+
+# Setup
+
+### Load libraries
+
+```{r}
+suppressPackageStartupMessages({
+  library(tibble)
+  library(ggplot2)
+  library(dplyr)
+  library(RColorBrewer)
+  library(corrplot)
+  library(scater)
+  library(scran)
+  source("../utils/helper_functions.R")
+})
+```
+
+### Set the directory and load data
+
+```{r}
+sce <- readRDS("/Users/reganhamel/gitlab/PhD_Dissertation_data/sce.RDS")
+
+#reorder the cell types for aesthetics 
+sce$cell_type <- factor(sce$cell_type,
+                        levels = c("CAMs","TCell","Monocyte","Neutrophil","Dendritic_Cells","Macrophage","Microglia"))
+
+dirP <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/Misc Plots/"
+```
+
+# Generate the area plot
+
+```{r}
+sce_comp <- sce
+
+# set the healthy control to 0
+sce_comp$stage <- factor(sce_comp$stage,
+                         levels = c("Ctrl","0", "1", "2", "3", "10", "21"))
+sce_comp$stage[sce_comp$stage == "Ctrl"] <- 0
+
+# set the x and y values for the plot
+y <- sce_comp$cell_type
+x <- droplevels(factor(sce_comp$stage))
+
+# create the df containing the x and y values
+df <- as.data.frame(table(y, x))
+colnames(df) <- c("y", "x", "Freq")
+
+# create data
+time <- as.numeric(levels(df$x)[df$x]) # x Axis
+value <- as.numeric(df$Freq)             # y Axis
+group <- df$y       # group, one shape per group
+data <- data.frame(time, value, group)
+
+# prep data
+data <- data  %>%
+  group_by(time, group) %>%
+  summarise(n = sum(value)) %>%
+  mutate(percentage = n / sum(n))
+
+# Plot
+ggplot(data, aes(x = time, y = percentage, fill = group)) + 
+  geom_area(alpha = 0.7 , size = 0.5, colour="black") + ylab("Fraction of Cells") +
+  scale_x_continuous(name = "Day Post-SCI", breaks = c(0,1,2, 3, 10, 21),
+                     labels = c("0"="Ctrl","1"="1","2"="2", "3"="3",
+                                "10"="10", "21"="21")) +
+  scale_fill_brewer(palette = "Accent", direction = -1)
+```
+
+# Histogram of cell type per cluster
+```{r}
+# set the x and y values for the plot
+y <- sce$cell_type
+x <- droplevels(factor(sce$Cluster))
+
+# create the df containing the x and y values
+df <- as.data.frame(table(y, x))
+colnames(df) <- c("y", "x", "Freq")
+
+# create data
+cluster <- as.numeric(levels(df$x)[df$x]) # x Axis
+value <- as.numeric(df$Freq)             # y Axis
+group <- df$y       # group, one shape per group
+data <- data.frame(cluster, value, group)
+
+# prep data
+data <- data  %>%
+  group_by(cluster, group) %>%
+  summarise(n = sum(value)) %>%
+  mutate(percentage = n / sum(n))
+
+# Plot
+ggplot(data, aes(fill = group, y = value, x = cluster)) + 
+  geom_bar(position = "stack", stat = "identity") +
+  ylab("Number of Cells") + xlab("Cluster")  + 
+  scale_x_discrete(limits = c(1:11)) +
+  scale_fill_brewer(palette = "Accent", direction = -1) 
+```
+
+# Correlation of clusters between stages
+
+### Pearson's residuals
+
+- http://www.sthda.com/english/wiki/chi-square-test-of-independence-in-r (how to interpret)
+```{r}
+# Create table
+All <- table(sce$Cluster, sce$stage)
+
+# Run ChiSquare test
+chisq <- chisq.test(All)
+
+# convert the z-scores (standardized residuals) to chi square values
+chisq.val <- chisq$stdres * chisq$stdres
+
+# convert the chi square values to p values
+chi.p <- pchisq(chisq.val, df = 1, lower.tail = FALSE) 
+
+# correct for multiple testing:
+# compare the chi square values to the bonferonni adjusted p value
+bf.p <- (0.05/(nrow(All)*ncol(All)))
+
+# Plot
+corrplot(chisq$stdres, p.mat=chi.p, is.cor = FALSE, sig.level = bf.p,
+         tl.col = "black", method="color", cl.length =10, insig = "blank")
+```
+
+# Generate box plots for genes of interest
+
+```{r}
+genes <- c("Ngp", "Ftl1", "Cd52", "Ctsb", "Timp2", "Mif", "Anxa5")
+
+bxplot(sce, x_name = "cell_type", genes = genes, colour = "cell_type") 
+```
+
+
+# Heatmaps
+
+### Miscellanious gene lists
+```{r}
+### set the cell type
+# input <- c("S100a9", "S100a8", "Retnlg", "Ifitm1", "Irg1", "Hdc", "Cxcr2", "Mxd1")
+# name <- "granulocytes"
+
+input <- c('Cd79a',  'Igll1',  'Vpreb3',  'Vpreb1',  'Lef1')
+#c("Ttr", "Igkc", "Ebpp2", "Ighg2c", "Ccl5",  "Ms4a4b", "Thy1", "Icos", "Trbc1", 'Trbc2', "Gzma", "Ccl5", "Prss34", "Ly6c2", "Vim", "Mpo")
+name <- "lymphocytes"
+
+# remove any genes not in the sce object
+input <- intersect(input, rownames(sce))
+
+### plot
+sce_hm <- sce
+
+#rename the barcodes in the sce object of duplicated cell names
+colnames(sce_hm) <- make.unique(colnames(sce), sep = "X")
+
+# plot and save the heatmap
+plotHeatmap(sce_hm, features = input, exprs_values = "logcounts", 
+            zlim = NULL, center = FALSE, symmetric = FALSE,
+            cluster_cols = FALSE,cluster_rows = TRUE,
+            colour_columns_by = c("cell_type","Cluster"),
+            columns = order(sce_hm$cell_type), main = paste(name),
+            fontsize_row = 5, fontsize_col = 0.2, treeheight_col = 40)
+```
+
+
+### Non-myeloid cell genes
+
+Prep the cell type-specific gene lists
+```{r}
+# load the gene lists for cell types collected from other scRNA-seq studies (see script for source articles)
+source("../gene_lists/NonM_RNA.R")
+
+# select the cell types to search for
+cells <- c(Peri, Ep,Neu, Ast, Olig, MG, MC, NP, DC)
+n <- c("Peri", "Ep", "Neu", "Ast", "Olig", "MG", "MC", "NP", "DC")
+x <- 0
+# TODO refactor this 
+for (i in cells) {
+  x <- x+1
+  genes <- i
+  input <- prepG(genes, sep = " ")
+  assign(n[x], input)
+}
+
+# label the rows by cell type that the gene sets represent
+rows <- data.frame(Genes = c(MG, MC, DC, NP,  Neu, Ast, Olig, Peri, Ep), 
+                   Cell_Type=c(rep("Microglia", length(MG)),
+                               rep("Monocyte/Monocyte-Derived", length(MC)),
+                               rep("Dendritic Cells", length(DC)),
+                               rep("Neutrophils", length(NP)),
+                               rep("Neurons", length(Neu)),
+                               rep("Astrocytes", length(Ast)),
+                               rep("Oligodendrocytes_OPCs", length(Olig)),
+                               rep("Pericytes", length(Peri)),
+                               rep("Ependymal_Cells", length(Ep)))
+)
+
+# remove duplicated genes
+rows <- rows[!duplicated(rows$Genes),] 
+rownames(rows) <- as.matrix(rows$Genes)
+
+# remove genes not in the sce
+rows <- rows[(rows$Genes %in% rownames(sce_hm)),]
+
+
+# Reorder and label the cell types
+# add empty factors to the cell_types 
+sce_hm$cell_type <- factor(sce_hm$cell_type,
+                           levels = c("Microglia", "MCd", "DC", "NP", "Neurons",
+                                      "Astrocytes", "Oligodendrocytes_OPCs",
+                                      "Pericytes", "Ependymal_Cells"))
+
+# add the full names of the cell types
+sce_hm$cell_type <- revalue(sce_hm$cell_type, c("MG" = "Microglia",
+                                                "MCd" = "Monocyte/Monocyte-Derived",
+                                                "DC" = "Dendritic Cells",
+                                                "NP" = "Neutrophils"))
+
+# run with fewer cells to improve speed 
+splitpro<- 0.3 ## 60/40 split
+tr <- sample(ncol(sce_hm), round(ncol(sce_hm) * splitpro))
+sce_hm.reduced <- sce_hm[,tr ]
+
+# Generate and save the heatmap
+plotHeatmap(sce_hm.reduced, features = rows$Genes, exprs_values = "logcounts",
+            cellheight = 0.75, cellwidth = 0.01, cluster_cols = FALSE,
+            cluster_rows = FALSE, columns = order(sce_hm$cell_type),
+            colour_columns_by = "cell_type", annotation_row = rows,
+            show_rownames = FALSE, center = FALSE, symmetric = FALSE,
+            scale = "column")
+```

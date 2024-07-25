@@ -20,6 +20,7 @@ suppressPackageStartupMessages({
   library(ggplot2)
   library(scran)
   library(BiocSingular)
+  source("../utils/helper_functions.R")
 })
 ```
 
@@ -74,57 +75,6 @@ plotHeatmap(sceH, features = genes, exprs_values="logcounts",
 ### Boxplot of activated genes
 
 By sample to demonstrate that SIGAG11.D2 is activated
-
-#### Helper function
-
-```{r}
-###############################################################################
-#' Boxplots
-#' @description Boxplots for genes of interest
-#' @param sce sce object
-#' @param x_name column data to plot on the x axis 
-#' @param genes genes to plot
-#' @param colour level to colour the boxplots on, ie, splitting xaxis values
-#' into groups
-#' @author Regan
-###############################################################################
-
-bxplot <- function(sce, x_name, genes, colour, plot_legend = TRUE) {
-  
-  x <- colData(sce)[, x_name]
-  col <- colData(sce)[, colour]
-  
-  plist <- list()
-  for (gene in genes) {
-    
-    if (gene %in% rownames(sce)) {
-      logs <- as.numeric(logcounts(sce[gene]))
-    } else {
-      logs <- as.numeric(colData(sce)[, gene])
-    }
-    
-    # create dataframe
-    df <- data.frame(Logs = logs, x = x, colour = col)
-    
-    # keep colour legend if more than one level
-    if (nlevels(factor(col)) == 1 | isFALSE(plot_legend)) {
-      legend <- theme(legend.position="none") 
-    } else {
-      legend <- NULL
-    }
-    
-    plist[[gene]] <- ggplot(data = df, aes(y = Logs, x = x, fill = col)) +
-      geom_boxplot() + ggtitle(gene) + 
-      legend +
-      theme(plot.title = element_text(hjust = 0.5),
-            axis.text.x = element_text(angle = 45, hjust = 1)) +
-      ylab("logcounts") + xlab(x_name) +
-      scale_fill_manual(values = c("lightblue", brewer.pal(11,"RdYlGn"),"#003319",
-                                   "black", "grey50", "grey50")) 
-  }
-  return(plist)
-}
-```
 
 ```{r}
 genes <- c("P2ry12", "Spp1", "Mki67", "Stmn1", "Cfl1", "Birc5", "Cd36")
