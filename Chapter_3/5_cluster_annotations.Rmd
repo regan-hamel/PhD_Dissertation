@@ -1,0 +1,210 @@
+---
+title: "Clustering"
+author: "Regan"
+date: "10/04/2020"
+output: html_document
+---
+
+# Introduction
+
+This notebook performs clustering on the post-batch corrected data and then annotates the cell types.
+
+# Setup
+
+### Load libraries
+
+```{r}
+suppressPackageStartupMessages({
+  library(scater)
+  library(scran)
+  library(dplyr)
+  library(pheatmap)
+  library(tensorflow)
+  library(cellassign)
+})
+```
+
+### Set the directory and load data
+
+```{r}
+sce <- readRDS("/Users/reganhamel/gitlab/PhD_Dissertation_data/sce_postBC.RDS")
+
+dirC <- "/Users/reganhamel/Documents/PhD/PhD Dissertation/Chapter 3/scRNAseq/3. Clustering/"
+```
+
+# Cluster
+
+### Perform clustering
+
+```{r}
+set.seed(100)
+
+metadata(sce)$k <- 20
+### generate the shared nearest neighbour graph
+# k ranges from 5-100
+# the larger k (# of nn), the fewer the clusters, 20 is the default in Seurat, 10 in scran
+# lower k means the noise will have a greater impact on the clustering. Larger values are computationally expensive 
+snn.gr <- buildSNNGraph(sce, use.dimred = "corrected", k = metadata(sce)$k, type = "jaccard") 
+
+#apply the louvain commuinity detection
+clusters <- igraph::cluster_louvain(snn.gr) 
+
+# store the clusters in the sce object column-based metadata
+sce$Cluster <- factor(clusters$membership)
+
+# preview
+table(sce$Cluster)
+
+plotUMAP(sce, colour_by = "Cluster", text_by = "Cluster")
+```
+
+### Investigate modularity between clusters
+
+```{r}
+# generating the modularity score to be used in the heatmap
+cluster.mod <- clusterModularity(snn.gr, sce$Cluster, get.weights = TRUE)
+log.ratio <- log2(cluster.mod$observed/cluster.mod$expected + 1)
+
+# generating and saving the heatmap
+pheatmap(log.ratio, cluster_rows = FALSE, cluster_cols = FALSE,
+         color=colorRampPalette(c("white", "#7A0177"))(100))
+```
+
+# Cell type annotation
+
+### Set the marker lists
+
+```{r}
+# lists for the cell types of interest
+marker_gene_list <- list(
+  Microglia = c("Sparc", "C1qa", "Plxdc2","Serpine2", "P2ry12", "Tmem119",
+                "Siglech", "Ctss", "Cst3", "Slc2a5", "Sall1"), # "Sall1" not in HVG
+  CAMs = c("Mrc1", "Lyve1", "Cd163", "Cbr2", "Ms4a7", "Cd74"), #low Siglec1 #no CAM genes in HVG
+  Dendritic_Cells = c("Cd74", "H2-Eb1", "H2-Aa", "Plac8", "H2-Ab1", "H2-DMb1",
+                      "H2-DMa", "Klrd1", "Flt3", "Zbtb46"), #Itgax (expressed in activated MG too) # not in HVG
+  Monocyte = c("Chil3", "Plac8", "Ccr2", "Rgs1", "Fn1"), #Vim (expressed in others)
+  Macrophage = c("Ms4a7", "Ecm1", "Arg1", "Ccl7", "Mgst1"), 
+  Neutrophil = c("S100a8", "S100a9", "Lcn2", "Dedd2", "Retnlg", "Wfdc21",
+                 "Mmp9", "Ly6g"), # not in HVG
+  TCell = c("Cd2",   "Cd3d",  "Cd3e",  "Cd3g",  "Cd28",  "Cd4","Ptprc") #"Vim" #no TCell genes in hVGs
+)
+
+
+markers <- c(marker_gene_list)
+marker_mat <- marker_list_to_mat(markers)
+
+head(rownames(marker_mat))
+
+#remove marker genes not in the HVG list
+rem <- !(unlist(markers) %in% rownames(sce))
+unlist(markers)[!(unlist(markers) %in% rownames(sce))]
+```
+
+### Prepare the sce with the gene list
+
+```{r}
+# subset the sce to match the marker genes
+sce_marker <- sce[rownames(marker_mat)]
+
+# keep a record of the marker genes used
+saveRDS(marker_gene_list, paste0(dirA, "/marker_gene_list.RDS"))
+```
+
+### Predict the cell type
+
+```{r}
+fit <- cellassign(exprs_obj = sce_marker[rownames(marker_mat),], 
+                  marker_gene_info = marker_mat, 
+                  s = sizeFactors(sce_marker), 
+                  shrinkage = TRUE,
+                  verbose = FALSE,
+                  threads = 4,
+                  min_delta = 2)
+
+# save the model
+saveRDS(fit, paste0(dirA, "fit.RDS"))
+
+#  maximum likelihood estimates (MLE)  of cell type using the `celltypes` function:
+summary(factor(celltypes(fit, assign_prob = .80)))
+
+# save the predicted cell type in the sce
+sce$cell_type_ca <- celltypes(fit, assign_prob = .80)
+```
+
+### Review model
+
+```{r}
+pheatmap(cellprobs(fit))
+plotUMAP(sce, colour_by = "cell_type_ca")
+```
+
+# Manual touch-ups
+
+```{r}
+#investigate the cluster membership of unasigned cells
+table(sce$Cluster, sce$cell_type_ca)
+
+sce$cell_type <- sce$cell_type_ca
+```
+
+### Manually assign cell types to unassigned cells based on cluster
+
+```{r}
+list <- list(
+  "1"="Microglia",
+  "2"="Macrophage",
+  "3"="Monocyte",
+  "4"="Neutrophil",
+  "5"="Microglia",
+  "6"=NULL,
+  "7"="Macrophage",
+  "8"="Macrophage",
+  "9"=NULL,
+  "10"="Microglia",
+  "11"="Microglia")
+
+for (i in 1:length(list)) {
+  CT <- list[[i]]
+  
+  sce$cell_type[sce$Cluster == i & (sce$cell_type_ca == "unassigned" | sce$cell_type_ca == "other")] <- CT
+}
+
+#sanity check
+table(sce$Cluster, sce$cell_type_ca)
+table(sce$Cluster, sce$cell_type)
+```
+
+### Correct NPs
+
+Note a few (9) NPs in the MG cluster - correct these
+
+```{r}
+sce$cell_type[sce$Cluster == 11 & sce$cell_type_ca == "Neutrophil"] <- "Microglia"
+sce$cell_type[sce$Cluster == 10 & sce$cell_type_ca == "Neutrophil"] <- "Microglia"
+
+table(sce$Cluster, sce$cell_type)
+```
+
+### Remove the NAs
+
+```{r}
+#check for NAs
+sce$Cluster[is.na(sce$cell_type)]
+
+#correct NAs based on majority in that cluster
+sce$cell_type[is.na(sce$cell_type) & sce$Cluster == 2]<- 'Macrophage'
+sce$cell_type[is.na(sce$cell_type) & sce$Cluster == 3]<- 'Macrophage'
+sce$cell_type[is.na(sce$cell_type) & sce$Cluster == 10] <- "Microglia"
+```
+
+### Final check
+
+```{r}
+plotUMAP(sce, colour_by = "cell_type")
+```
+
+### Save
+
+```{r}
+saveRDS(sce, paste0(dirA, "sce.RDS"))
+```
